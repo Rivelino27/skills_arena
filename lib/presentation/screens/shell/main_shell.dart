@@ -46,7 +46,9 @@ class _MainShellState extends State<MainShell> {
     final cs = Theme.of(context).colorScheme;
 
     if (_controller.index != currentIndex) {
-      _controller.jumpToTab(currentIndex);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.jumpToTab(currentIndex);
+      });
     }
 
     return PersistentTabView(

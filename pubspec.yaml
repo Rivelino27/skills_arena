@@ -25,10 +25,10 @@ dependencies:
   # Roteamento
   go_router: ^17.2.3
 
-  # Navegação
+  # Navegacao
   persistent_bottom_nav_bar_v2: ^6.2.0
 
-  # Utilitários
+  # Utilitarios
   dartz: ^0.10.1
   equatable: ^2.0.5
 
@@ -39,6 +39,12 @@ dependencies:
 
   # Armazenamento local
   shared_preferences: ^2.2.3
+
+  # Mapa e localizacao
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.0
+  geolocator: ^12.0.0
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
