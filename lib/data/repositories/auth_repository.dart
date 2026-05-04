@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -52,8 +53,21 @@ class AuthRepository {
       return _upsertUser(result.user!);
     } on FirebaseAuthException catch (e) {
       return Left(AuthFailure(message: _errorMessage(e.code), code: e.code));
+    } on PlatformException catch (e) {
+      // google_sign_in lança PlatformException quando o login falha no Android.
+      // Causa mais comum: SHA-1 do debug keystore não cadastrado no Firebase Console.
+      if (e.code == 'sign_in_failed') {
+        return const Left(AuthFailure(
+          message:
+              'Falha no login com Google. Certifique-se de que o SHA-1 do '
+              'debug keystore está cadastrado no Firebase Console e que há '
+              'uma conta Google configurada no dispositivo.',
+          code: 'sign_in_failed',
+        ));
+      }
+      return Left(AuthFailure(message: 'Erro no login com Google: ${e.message}', code: e.code));
     } catch (e) {
-      return Left(UnknownFailure(message: e.toString()));
+      return const Left(UnknownFailure(message: 'Erro ao entrar com Google.'));
     }
   }
 
@@ -140,6 +154,7 @@ class AuthRepository {
         email: user.email!,
         name: name ?? user.displayName,
         photoUrl: user.photoURL,
+        isPremium: false,
         createdAt: now,
         updatedAt: now,
       );
