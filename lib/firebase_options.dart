@@ -69,6 +69,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '492117491640',
     projectId: 'skills-arena-c2c71',
     storageBucket: 'skills-arena-c2c71.firebasestorage.app',
+    androidClientId: '492117491640-pl1rt4cr4nl8a66ei59jshv1fsik6m81.apps.googleusercontent.com',
     iosClientId: '492117491640-512olk2ok7srtru2g5ceh8pq5sgugigm.apps.googleusercontent.com',
     iosBundleId: 'com.r27systems.skillsArena',
   );

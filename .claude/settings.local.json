@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "PowerShell(Remove-Item -Recurse -Force \"H:\\\\Linguagens\\\\Flutter\\\\Projetos_working\\\\skills_arena\\\\android\\\\app\\\\src\\\\main\\\\kotlin\\\\com\\\\example\" -Confirm:$false)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash(flutter pub *)"
     ]
   }
 }

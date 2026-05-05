@@ -1,0 +1,9 @@
+falta poder comentar em postagens, mandar mensagens para a pessoas da postagem clicando nela e vendo o perfil dela.
+A pessoa pode postar links do tik tok também nas postagens.
+no modo de inserir local de esporte apareer um pin que a pessoa vai movendo ele até o local no mapa e ao tocar novamante nele ou no botão + que deve aparecer ela inlui olocal do esporte
+deve ser possivel achar os users or e-mail ou nome de usuario, mas cada user pode desabilitar ou não a busca por email.
+
+colocar um botão na aba perfil para ir em uma tela com botões para ir em um tela teste sem exibir a bottom bar, exibndo a bottom bar e uma tela com voltr personalizado, 
+só nesta tela o voltar deve ser personalizado.
+
+Ativer historicode navegação de abas, sem voltar dus vezes para a mesma aba e a ultima aba antes de sair do app deve sempre ser a home.

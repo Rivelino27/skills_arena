@@ -10,7 +10,6 @@ import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../providers/sports_provider.dart';
-import '../../widgets/navigation/custom_back_button.dart';
 import 'add_venue_screen.dart';
 import 'find_players_screen.dart';
 import 'venue_detail_screen.dart';
@@ -135,16 +134,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: CustomBackButton(
-          options: [
-            BackMenuOption(
-              icon: Icons.explore_outlined,
-              label: 'Voltar para Explorar',
-              onTap: () =>
-                  Navigator.of(context).popUntil((r) => r.isFirst),
-            ),
-          ],
-        ),
         title: const Text('Mapa de Quadras'),
         actions: [
           IconButton(
