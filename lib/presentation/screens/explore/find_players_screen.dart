@@ -1,13 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
+import '../chat/new_conversation_screen.dart';
 
 /// Tela de busca de jogadores — com bottom nav bar visível (pushWithNavBar).
 class FindPlayersScreen extends ConsumerStatefulWidget {
@@ -123,7 +124,8 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
                       player: players[i],
                       userLat: widget.userLat,
                       userLng: widget.userLng,
-                      onChat: () => context.go('/chat'),
+                      onChat: () => AppNavigator.pushWithNavBar(
+                          context, const NewConversationScreen()),
                     ),
                   ),
           ),

@@ -42,19 +42,27 @@ class NewConversationScreen extends ConsumerWidget {
   Future<void> _startChat(
       BuildContext context, WidgetRef ref, UserModel user) async {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    final conv = await ref.read(chatRepositoryProvider).getOrCreateConversation(
-          otherUid: user.id,
-          otherName: user.name ?? 'Usuário',
-          otherPhoto: user.photoUrl,
-        );
-
-    if (!context.mounted) return;
-
-    AppNavigator.pushWithNavBar(
-      context,
-      ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
-    );
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: user.id,
+                otherName: user.name ?? 'Usuário',
+                otherPhoto: user.photoUrl,
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao abrir conversa: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 }
 

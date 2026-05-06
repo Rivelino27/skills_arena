@@ -49,7 +49,7 @@ class ChatScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        // ← pushWithoutNavBar: abre SEM a bottom nav bar
+        heroTag: null,
         onPressed: () => AppNavigator.pushWithoutNavBar(
             context, const NewConversationScreen()),
         tooltip: 'Nova conversa',

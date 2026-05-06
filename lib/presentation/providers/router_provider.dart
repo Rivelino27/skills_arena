@@ -6,28 +6,24 @@ import '../../data/repositories/auth_repository.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
-import '../screens/chat/chat_screen.dart';
-import '../screens/explore/explore_screen.dart';
-import '../screens/home/home_screen.dart';
-import '../screens/profile/profile_screen.dart';
 import '../screens/shell/main_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
 
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/app',
     redirect: (context, state) {
       final isLoggedIn = authState.valueOrNull != null;
       final isAuthRoute = state.uri.path.startsWith('/auth');
 
       if (!isLoggedIn && !isAuthRoute) return '/auth/login';
-      if (isLoggedIn && isAuthRoute) return '/home';
+      if (isLoggedIn && isAuthRoute) return '/app';
       return null;
     },
     refreshListenable: _AuthChangeNotifier(ref),
     routes: [
-      // ── Auth (sem shell) ───────────────────────────────────────────────
+      // ── Auth ──────────────────────────────────────────────────────────────
       GoRoute(
         path: '/auth/login',
         name: 'login',
@@ -46,39 +42,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
 
-      // ── App com NavigationBar (ShellRoute) ─────────────────────────────
-      ShellRoute(
-        builder: (context, state, child) => MainShell(child: child),
-        routes: [
-          GoRoute(
-            path: '/home',
-            name: 'home',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: HomeScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/explore',
-            name: 'explore',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ExploreScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/chat',
-            name: 'chat',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ChatScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/profile',
-            name: 'profile',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfileScreen(),
-            ),
-          ),
-        ],
+      // ── App shell ─────────────────────────────────────────────────────────
+      // GoRoute simples (sem ShellRoute) para evitar navigator extra do GoRouter
+      // que interceptava PopScope e causava conflito de Hero animations.
+      // A MainShell gerencia toda a navegação internamente (IndexedStack + PopScope).
+      GoRoute(
+        path: '/app',
+        name: 'app',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: MainShell(),
+        ),
       ),
     ],
   );

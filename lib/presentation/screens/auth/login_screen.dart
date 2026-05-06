@@ -39,7 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = false);
     result.fold(
       (f) => _showError(f.message),
-      (_) => context.go('/home'),
+      (_) => context.go('/app'),
     );
   }
 
@@ -50,7 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = false);
     result.fold(
       (f) => _showError(f.message),
-      (_) => context.go('/home'),
+      (_) => context.go('/app'),
     );
   }
 

@@ -1,15 +1,21 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../providers/sports_provider.dart';
+import '../chat/conversation_screen.dart';
 import 'add_venue_screen.dart';
 import 'find_players_screen.dart';
 import 'venue_detail_screen.dart';
@@ -64,9 +70,14 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
+  final _searchCtrl = TextEditingController();
   Position? _userPosition;
   bool _loadingLocation = true;
   bool _pinMode = false;
+  bool _showSearch = false;
+  bool _searching = false;
+  List<_GeoResult> _suggestions = [];
+  Timer? _debounce;
   LatLng _pinPosition = const LatLng(-23.5505, -46.6333);
 
   static const _defaultCenter = LatLng(-23.5505, -46.6333); // São Paulo
@@ -85,8 +96,68 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _mapController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().length < 3) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _fetchSuggestions(query),
+    );
+  }
+
+  Future<void> _fetchSuggestions(String query) async {
+    setState(() => _searching = true);
+    try {
+      final client = HttpClient();
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': query.trim(),
+        'format': 'json',
+        'limit': '5',
+        'countrycodes': 'br',
+      });
+      final request = await client.getUrl(uri);
+      request.headers
+        ..set(HttpHeaders.userAgentHeader, 'SkillsArena/1.0')
+        ..set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close();
+      final body = await response.transform(const Utf8Decoder()).join();
+      client.close();
+      if (!mounted) return;
+      final list = jsonDecode(body) as List<dynamic>;
+      setState(() {
+        _suggestions = list.map((e) {
+          final m = e as Map<String, dynamic>;
+          return _GeoResult(
+            displayName: m['display_name'] as String,
+            lat: double.parse(m['lat'] as String),
+            lon: double.parse(m['lon'] as String),
+          );
+        }).toList();
+        _searching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  void _selectSuggestion(_GeoResult r) {
+    _debounce?.cancel();
+    _mapController.move(LatLng(r.lat, r.lon), 15.0);
+    setState(() {
+      _showSearch = false;
+      _suggestions = [];
+      _searching = false;
+    });
+    _searchCtrl.clear();
   }
 
   Future<void> _initLocation() async {
@@ -139,13 +210,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         title: const Text('Mapa de Quadras'),
         actions: [
           IconButton(
+            icon: Icon(
+                _showSearch ? Icons.search_off_rounded : Icons.search_rounded),
+            tooltip: _showSearch ? 'Fechar busca' : 'Buscar endereço',
+            onPressed: () => setState(() {
+              _showSearch = !_showSearch;
+              if (!_showSearch) {
+                _searchCtrl.clear();
+                _suggestions = [];
+              }
+            }),
+          ),
+          IconButton(
             icon: const Icon(Icons.tune_rounded),
             tooltip: 'Raio de busca',
             onPressed: () => _showRadiusSheet(context, ref, radius),
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(52),
+          preferredSize: const Size.fromHeight(44),
           child: _SportFilterBar(
             selected: selectedSport,
             onChanged: (s) =>
@@ -251,6 +334,96 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
             ],
           ),
+          // ── Address search overlay ────────────────────────────────────
+          if (_showSearch)
+            Positioned(
+              top: 8,
+              left: 12,
+              right: 12,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(12),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      onChanged: _onSearchChanged,
+                      onSubmitted: (q) {
+                        if (_suggestions.isNotEmpty) {
+                          _selectSuggestion(_suggestions.first);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Buscar endereço...',
+                        prefixIcon: _searching
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                ),
+                              )
+                            : const Icon(Icons.search_rounded),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => setState(() {
+                            _showSearch = false;
+                            _suggestions = [];
+                            _searchCtrl.clear();
+                          }),
+                        ),
+                        filled: true,
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  if (_suggestions.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Material(
+                      elevation: 6,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: ListView.separated(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: _suggestions.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final r = _suggestions[i];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                  Icons.location_on_outlined,
+                                  size: 20),
+                              title: Text(
+                                r.displayName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              onTap: () => _selectSuggestion(r),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           if (_loadingLocation)
             Positioned(
               top: 12,
@@ -461,12 +634,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ],
                 const SizedBox(height: 20),
                 FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.of(ctx).pop();
-                    context.go('/chat');
+                    try {
+                      final conv = await ref
+                          .read(chatRepositoryProvider)
+                          .getOrCreateConversation(
+                            otherUid: player.userId,
+                            otherName: player.userName,
+                            otherPhoto: player.userPhotoUrl,
+                          );
+                      final myUid =
+                          FirebaseAuth.instance.currentUser?.uid ?? '';
+                      if (context.mounted) {
+                        AppNavigator.pushWithNavBar(
+                          context,
+                          ConversationScreen(
+                              chatId: conv.id, conv: conv, myUid: myUid),
+                        );
+                      }
+                    } catch (_) {}
                   },
                   icon: const Icon(Icons.chat_bubble_rounded),
-                  label: const Text('Abrir chat'),
+                  label: const Text('Enviar mensagem'),
                 ),
               ],
             ),
@@ -475,6 +665,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       },
     );
   }
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+class _GeoResult {
+  final String displayName;
+  final double lat;
+  final double lon;
+  const _GeoResult(
+      {required this.displayName, required this.lat, required this.lon});
 }
 
 // ─── Widgets auxiliares ───────────────────────────────────────────────────────

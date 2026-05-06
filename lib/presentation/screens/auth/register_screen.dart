@@ -47,7 +47,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       ),
-      (_) => context.go('/home'),
+      (_) => context.go('/app'),
     );
   }
 

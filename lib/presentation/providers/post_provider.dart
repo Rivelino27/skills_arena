@@ -17,3 +17,8 @@ final userPostsStreamProvider =
     StreamProvider.family<List<PostModel>, String>((ref, userId) {
   return ref.watch(postRepositoryProvider).userPostsStream(userId);
 });
+
+final venuePostsStreamProvider =
+    StreamProvider.family<List<PostModel>, String>((ref, venueId) {
+  return ref.watch(postRepositoryProvider).postsStream(venueId: venueId);
+});

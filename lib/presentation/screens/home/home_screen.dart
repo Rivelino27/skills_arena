@@ -56,6 +56,7 @@ class HomeScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         onPressed: () =>
             AppNavigator.pushWithoutNavBar(context, const CreatePostScreen()),
         tooltip: 'Nova publicação',

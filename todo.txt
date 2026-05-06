@@ -7,3 +7,15 @@ colocar um botão na aba perfil para ir em uma tela com botões para ir em um te
 só nesta tela o voltar deve ser personalizado.
 
 Ativer historicode navegação de abas, sem voltar dus vezes para a mesma aba e a ultima aba antes de sair do app deve sempre ser a home.
+
+>>
+Arrume, esta com o bug de voltar entre abas bottom nav bar com historico, o voltar entre abs não funciona ao paertar voltar no android, mas
+só funciona no app quando vamos na aba chat, entramos em nova conversa e voltamos ai sim, funciona em todo app o voltar com histrico no
+bottom navigation bar.
+
+Erro ao abrir conversa: (cloud_firestoreipermission•
+deni±l The call-r doe-s not hawE permission to
+execute the spetified operation,
+W/Firestore(15913): (24.11.0) [Firestore]: Listen for Query(target=Query(chats/lzcZtIFJ17XI2mn3PiQ8coLp6YC3_ytBGjOtFeecgwQEddSFfnN2VdbB3 order by __name__);limitType=LIMIT_TO_FIRST) failed: Status{code=PERMISSION_DENIED, description=Missing or insufficient permissions., cause=null}
+
+colocar lista suspensa de endereçço ao digitar ele, ir completando endereço ao digitar ele.
