@@ -6,12 +6,14 @@ import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-// ─── POR QUE WidgetsBindingObserver e não PopScope ───────────────────────────
-// GoRouter instala seu próprio BackButtonDispatcher. Quando a pilha GoRouter
-// tem apenas um route (/app), o GoRouter retorna false sem chamar maybePop(),
-// então PopScope.onPopInvokedWithResult nunca dispara.
-// WidgetsBindingObserver.didPopRoute() é chamado ANTES do GoRouter processar
-// o back event. Usamos isso para tratar toda a navegação de abas/sub-telas.
+// ─── POR QUE PopScope e não WidgetsBindingObserver ────────────────────────────
+// No Android 13+ com predictive back, o Flutter chama Navigator.maybePop()
+// diretamente (novo path), não WidgetsBindingObserver.didPopRoute() (API antiga).
+// PopScope registra com o ModalRoute de /app e só dispara quando essa rota é a
+// mais recente — telas empilhadas via pushWithoutNavBar ficam por cima e tratam
+// seu próprio back sem interferir. Sub-telas das abas (pushWithNavBar) ficam no
+// tab Navigator interno, então o PopScope de /app ainda dispara e _onPopInvoked
+// faz tabNav.pop() manualmente.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class MainShell extends StatefulWidget {
@@ -21,7 +23,7 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
+class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   final List<int> _tabHistory = [0];
 
@@ -30,53 +32,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   double _dragStartX = 0.0;
   double _dragDeltaX = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  // Intercepta back do Android ANTES do GoRouter.
-  // Retorna true = evento consumido (GoRouter não processa).
-  // Retorna false = GoRouter processa (ex: tela com PopScope(canPop:false) acima).
-  @override
-  Future<bool> didPopRoute() async {
-    if (!mounted) return false;
-
-    // Se há algo acima do shell no navigator raiz (ex: _TestCustomBack via
-    // pushWithoutNavBar), deixa o GoRouter + PopScope daquela tela lidar.
-    final rootNav = Navigator.maybeOf(context, rootNavigator: true);
-    if (rootNav == null) return false;
-    if (rootNav.canPop()) return false;
-
-    // Sub-tela dentro da aba atual (via pushWithNavBar)
-    final tabNav = _navKeys[_currentIndex].currentState;
-    if (tabNav?.canPop() ?? false) {
-      tabNav!.pop();
-      return true;
-    }
-
-    // Aba anterior no histórico
-    if (_tabHistory.length > 1) {
-      setState(() {
-        _tabHistory.removeLast();
-        _removeConsecutiveDuplicates();
-        _currentIndex = _tabHistory.last;
-      });
-      return true;
-    }
-
-    // Sem mais histórico → sair do app
-    SystemNavigator.pop();
-    return true;
-  }
 
   void _removeConsecutiveDuplicates() {
     for (int i = _tabHistory.length - 1; i > 0; i--) {
@@ -103,66 +58,91 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
+  void _onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) return;
+
+    final tabNav = _navKeys[_currentIndex].currentState;
+    if (tabNav?.canPop() ?? false) {
+      tabNav!.pop();
+      return;
+    }
+
+    if (_tabHistory.length > 1) {
+      setState(() {
+        _tabHistory.removeLast();
+        _removeConsecutiveDuplicates();
+        _currentIndex = _tabHistory.last;
+      });
+      return;
+    }
+
+    SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: List.generate(4, _buildTabNavigator),
-      ),
-      bottomNavigationBar: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: (d) {
-          _dragStartX = d.globalPosition.dx;
-          _dragDeltaX = 0.0;
-        },
-        onHorizontalDragUpdate: (d) {
-          _dragDeltaX = d.globalPosition.dx - _dragStartX;
-        },
-        onHorizontalDragEnd: (_) {
-          if (_dragDeltaX.abs() > 50) {
-            final newIndex = _dragDeltaX > 0
-                ? (_currentIndex > 0 ? _currentIndex - 1 : 3)
-                : (_currentIndex < 3 ? _currentIndex + 1 : 0);
-            _onTabTapped(newIndex);
-          }
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: cs.outlineVariant, width: 0.5),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: List.generate(4, _buildTabNavigator),
+        ),
+        bottomNavigationBar: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (d) {
+            _dragStartX = d.globalPosition.dx;
+            _dragDeltaX = 0.0;
+          },
+          onHorizontalDragUpdate: (d) {
+            _dragDeltaX = d.globalPosition.dx - _dragStartX;
+          },
+          onHorizontalDragEnd: (_) {
+            if (_dragDeltaX.abs() > 50) {
+              final newIndex = _dragDeltaX > 0
+                  ? (_currentIndex > 0 ? _currentIndex - 1 : 3)
+                  : (_currentIndex < 3 ? _currentIndex + 1 : 0);
+              _onTabTapped(newIndex);
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: cs.outlineVariant, width: 0.5),
+              ),
             ),
-          ),
-          child: NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: _onTabTapped,
-            backgroundColor: cs.surface,
-            elevation: 0,
-            surfaceTintColor: Colors.transparent,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Home',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.explore_outlined),
-                selectedIcon: Icon(Icons.explore_rounded),
-                label: 'Explorar',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.chat_bubble_outline_rounded),
-                selectedIcon: Icon(Icons.chat_bubble_rounded),
-                label: 'Chat',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'Perfil',
-              ),
-            ],
+            child: NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: _onTabTapped,
+              backgroundColor: cs.surface,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: 'Explorar',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.chat_bubble_outline_rounded),
+                  selectedIcon: Icon(Icons.chat_bubble_rounded),
+                  label: 'Chat',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: 'Perfil',
+                ),
+              ],
+            ),
           ),
         ),
       ),
