@@ -1,10 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config/firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'data/repositories/auth_repository.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/shell/main_shell.dart';
 
@@ -22,11 +22,11 @@ void main() async {
   );
 }
 
-class MyApp extends ConsumerWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Skills Arena',
       debugShowCheckedModeBanner: false,
@@ -38,18 +38,12 @@ class MyApp extends ConsumerWidget {
   }
 }
 
-class AuthGate extends ConsumerWidget {
+class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
-    return authState.when(
-      data: (user) => user != null ? const MainShell() : const LoginScreen(),
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (_, __) => const LoginScreen(),
-    );
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    return user != null ? const MainShell() : const LoginScreen();
   }
 }
