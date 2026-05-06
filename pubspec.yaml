@@ -25,9 +25,6 @@ dependencies:
   # Roteamento
   go_router: ^17.2.3
 
-  # Navegacao
-  persistent_bottom_nav_bar_v2: ^6.2.0
-
   # Utilitarios
   dartz: ^0.10.1
   equatable: ^2.0.5

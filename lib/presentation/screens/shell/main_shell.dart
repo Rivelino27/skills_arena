@@ -1,25 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-// ─── HISTÓRICO DE ABAS ───────────────────────────────────────────────────────
-// O próprio pacote gerencia:
-//   1) Pop de sub-telas da aba atual (via NavigatorConfig.navigatorKey)
-//   2) Histórico de abas (PersistentTabController.historyLength)
-//   3) Saída do app quando histórico está vazio e não há sub-telas
+// ─── ARQUITETURA DE NAVEGAÇÃO ────────────────────────────────────────────────
+// Baseada no padrão nav27: IndexedStack + Navigator por aba + PopScope manual.
 //
-// Nossa responsabilidade: sincronizar o estado do GoRouter (URL)
-// via onTabChanged para que o redirect de auth continue funcionando.
+// Responsabilidades:
+//   1) IndexedStack com Navigator independente por aba (estado preservado)
+//   2) PopScope(canPop: false) intercepta QUALQUER back do Android/gesto
+//   3) _onPopInvokedWithResult: pop sub-tela → aba anterior → sair do app
+//   4) Swipe horizontal na nav bar para trocar abas
+//   5) GoRouter atualizado via context.go() para manter redirect de auth
+//
+// Por que não persistent_bottom_nav_bar_v2:
+//   O pacote interceptava todo back event antes dos PopScope das telas filhas,
+//   impedindo que _TestCustomBack (via pushWithoutNavBar) funcionasse com gesto.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class MainShell extends StatefulWidget {
-  // child vem do ShellRoute do GoRouter — não é usado diretamente
-  // pois o PersistentTabView gerencia a exibição das abas.
   final Widget child;
   const MainShell({super.key, required this.child});
 
@@ -30,11 +33,14 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   static const _routes = ['/home', '/explore', '/chat', '/profile'];
 
-  late final PersistentTabController _controller;
+  int _currentIndex = 0;
+  final List<int> _tabHistory = [0];
 
-  // Navigator keys passados via NavigatorConfig — usados pelo pacote para
-  // verificar e popar sub-telas ao pressionar voltar.
-  final _navKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
+  final List<GlobalKey<NavigatorState>> _navKeys =
+      List.generate(4, (_) => GlobalKey<NavigatorState>());
+
+  double _dragStartX = 0.0;
+  double _dragDeltaX = 0.0;
 
   int _indexFromLocation(String location) {
     if (location.startsWith('/explore')) return 1;
@@ -43,103 +49,146 @@ class _MainShellState extends State<MainShell> {
     return 0;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = PersistentTabController(
-      initialIndex: 0,
-      historyLength: 5,
-      // Ao tocar na Home, limpa o histórico → próximo voltar sai do app
-      clearHistoryOnInitialIndex: true,
-    );
+  void _removeConsecutiveDuplicates() {
+    for (int i = _tabHistory.length - 1; i > 0; i--) {
+      if (_tabHistory[i] == _tabHistory[i - 1]) {
+        _tabHistory.removeAt(i);
+      }
+    }
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void _onTabTapped(int index) {
+    if (index == _currentIndex) {
+      _navKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
+    setState(() {
+      if (_tabHistory.last != index) {
+        // Remove entrada duplicada de abas não-home para evitar histórico cíclico
+        if (_tabHistory.contains(index) && index != 0) {
+          _tabHistory.remove(index);
+        }
+        _tabHistory.add(index);
+        _removeConsecutiveDuplicates();
+      }
+      _currentIndex = index;
+    });
+    context.go(_routes[index]);
+  }
+
+  // Única entrada para back do Android, gesto de swipe e botão de sistema.
+  // GoRouter's PopScope está acima do shell apenas quando há tela via
+  // pushWithoutNavBar — nesse caso o PopScope DAQUELA tela dispara primeiro.
+  void _onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) return;
+
+    final currentNavigator = _navKeys[_currentIndex].currentState;
+    if (currentNavigator?.canPop() ?? false) {
+      currentNavigator!.pop();
+    } else if (_tabHistory.length > 1) {
+      setState(() {
+        _tabHistory.removeLast();
+        _removeConsecutiveDuplicates();
+        _currentIndex = _tabHistory.last;
+      });
+      context.go(_routes[_currentIndex]);
+    } else {
+      SystemNavigator.pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
-    final currentIndex = _indexFromLocation(location);
+    final targetIndex = _indexFromLocation(location);
     final cs = Theme.of(context).colorScheme;
 
-    // Sincroniza o controller com a rota atual do GoRouter
-    // (ex: redirect de auth para /home)
-    if (_controller.index != currentIndex) {
+    // Sync quando GoRouter força redirect (ex: login → /home)
+    if (_currentIndex != targetIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.jumpToTab(currentIndex);
+        if (mounted && _currentIndex != targetIndex) {
+          setState(() => _currentIndex = targetIndex);
+        }
       });
     }
 
-    return PersistentTabView(
-      controller: _controller,
-      // O pacote gerencia o botão voltar:
-      //   - pop sub-tela se houver
-      //   - navegar aba anterior via historyLength
-      //   - sair do app se não há mais histórico
-      handleAndroidBackButtonPress: true,
-      resizeToAvoidBottomInset: true,
-      stateManagement: true,
-      // Mantém URL do GoRouter sincronizada quando o pacote troca de aba
-      onTabChanged: (index) => context.go(_routes[index]),
-      backgroundColor: cs.surface,
-      tabs: [
-        PersistentTabConfig(
-          screen: const HomeScreen(),
-          navigatorConfig: NavigatorConfig(navigatorKey: _navKeys[0]),
-          item: ItemConfig(
-            icon: const Icon(Icons.home_rounded),
-            inactiveIcon: const Icon(Icons.home_outlined),
-            title: 'Home',
-            activeForegroundColor: cs.primary,
-            inactiveForegroundColor: cs.onSurfaceVariant,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: List.generate(4, _buildTabNavigator),
+        ),
+        bottomNavigationBar: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (d) {
+            _dragStartX = d.globalPosition.dx;
+            _dragDeltaX = 0.0;
+          },
+          onHorizontalDragUpdate: (d) {
+            _dragDeltaX = d.globalPosition.dx - _dragStartX;
+          },
+          onHorizontalDragEnd: (_) {
+            if (_dragDeltaX.abs() > 50) {
+              final newIndex = _dragDeltaX > 0
+                  ? (_currentIndex > 0 ? _currentIndex - 1 : 3)
+                  : (_currentIndex < 3 ? _currentIndex + 1 : 0);
+              _onTabTapped(newIndex);
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: cs.outlineVariant, width: 0.5),
+              ),
+            ),
+            child: NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: _onTabTapped,
+              backgroundColor: cs.surface,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: 'Explorar',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.chat_bubble_outline_rounded),
+                  selectedIcon: Icon(Icons.chat_bubble_rounded),
+                  label: 'Chat',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: 'Perfil',
+                ),
+              ],
+            ),
           ),
         ),
-        PersistentTabConfig(
-          screen: const ExploreScreen(),
-          navigatorConfig: NavigatorConfig(navigatorKey: _navKeys[1]),
-          item: ItemConfig(
-            icon: const Icon(Icons.explore_rounded),
-            inactiveIcon: const Icon(Icons.explore_outlined),
-            title: 'Explorar',
-            activeForegroundColor: cs.primary,
-            inactiveForegroundColor: cs.onSurfaceVariant,
-          ),
-        ),
-        PersistentTabConfig(
-          screen: const ChatScreen(),
-          navigatorConfig: NavigatorConfig(navigatorKey: _navKeys[2]),
-          item: ItemConfig(
-            icon: const Icon(Icons.chat_bubble_rounded),
-            inactiveIcon: const Icon(Icons.chat_bubble_outline_rounded),
-            title: 'Chat',
-            activeForegroundColor: cs.primary,
-            inactiveForegroundColor: cs.onSurfaceVariant,
-          ),
-        ),
-        PersistentTabConfig(
-          screen: const ProfileScreen(),
-          navigatorConfig: NavigatorConfig(navigatorKey: _navKeys[3]),
-          item: ItemConfig(
-            icon: const Icon(Icons.person_rounded),
-            inactiveIcon: const Icon(Icons.person_outline_rounded),
-            title: 'Perfil',
-            activeForegroundColor: cs.primary,
-            inactiveForegroundColor: cs.onSurfaceVariant,
-          ),
-        ),
-      ],
-      navBarBuilder: (navBarConfig) => Style1BottomNavBar(
-        navBarConfig: navBarConfig,
-        navBarDecoration: NavBarDecoration(
-          color: cs.surface,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
-        ),
+      ),
+    );
+  }
+
+  Widget _buildTabNavigator(int index) {
+    const screens = [
+      HomeScreen(),
+      ExploreScreen(),
+      ChatScreen(),
+      ProfileScreen(),
+    ];
+    return Navigator(
+      key: _navKeys[index],
+      onGenerateRoute: (settings) => MaterialPageRoute(
+        builder: (_) => screens[index],
       ),
     );
   }

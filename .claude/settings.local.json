@@ -5,7 +5,10 @@
       "Bash(flutter analyze *)",
       "Bash(flutter pub *)",
       "Bash(find \"C:/Users/TD48/AppData/Local/Pub/Cache/hosted/pub.dev\" -path \"*persistent_bottom_nav_bar_v2*\" -name \"*.dart\" 2>/dev/null | head -20)",
-      "Read(//c/Users/TD48/AppData/Local/Pub/Cache/hosted/pub.dev/**)"
+      "Read(//c/Users/TD48/AppData/Local/Pub/Cache/hosted/pub.dev/**)",
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
