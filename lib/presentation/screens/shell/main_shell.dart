@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-// ─── POR QUE PopScope e não WidgetsBindingObserver ────────────────────────────
-// No Android 13+ com predictive back, o Flutter chama Navigator.maybePop()
-// diretamente (novo path), não WidgetsBindingObserver.didPopRoute() (API antiga).
-// PopScope registra com o ModalRoute de /app e só dispara quando essa rota é a
-// mais recente — telas empilhadas via pushWithoutNavBar ficam por cima e tratam
-// seu próprio back sem interferir. Sub-telas das abas (pushWithNavBar) ficam no
-// tab Navigator interno, então o PopScope de /app ainda dispara e _onPopInvoked
-// faz tabNav.pop() manualmente.
+// ─── POR QUE BackButtonListener e não PopScope / WidgetsBindingObserver ───────
+// go_router v14+ faz uma verificação canPop() ANTES de chamar maybePop() no
+// seu delegate. Quando só existe a rota /app na pilha, canPop() == false e ele
+// retorna false sem chamar maybePop() → PopScope nunca dispara.
+// WidgetsBindingObserver.didPopRoute() tem o mesmo problema no predictive-back
+// do Android 13+ (Flutter chama maybePop() diretamente, não didPopRoute).
+//
+// BackButtonListener usa ChildBackButtonDispatcher.takePriority() para entrar
+// NA FILA do RootBackButtonDispatcher do go_router com prioridade máxima —
+// nosso callback é chamado ANTES da lógica de roteamento do go_router.
+// Se retornarmos false, go_router ainda processa (ex.: pop de telas fullscreen).
 // ─────────────────────────────────────────────────────────────────────────────
 
 class MainShell extends StatefulWidget {
@@ -58,34 +60,39 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  void _onPopInvokedWithResult(bool didPop, Object? result) {
-    if (didPop) return;
+  Future<bool> _handleBackButton() async {
+    // Telas empilhadas acima de /app via pushWithoutNavBar (rootNavigator:true)
+    // → deixa o go_router fazer o pop normal.
+    final rootNav = Navigator.maybeOf(context, rootNavigator: true);
+    if (rootNav != null && rootNav.canPop()) return false;
 
+    // Sub-tela dentro da aba atual (via pushWithNavBar → tab Navigator)
     final tabNav = _navKeys[_currentIndex].currentState;
     if (tabNav?.canPop() ?? false) {
       tabNav!.pop();
-      return;
+      return true;
     }
 
+    // Aba anterior no histórico
     if (_tabHistory.length > 1) {
       setState(() {
         _tabHistory.removeLast();
         _removeConsecutiveDuplicates();
         _currentIndex = _tabHistory.last;
       });
-      return;
+      return true;
     }
 
-    SystemNavigator.pop();
+    // Sem histórico → deixa o sistema sair do app
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: _onPopInvokedWithResult,
+    return BackButtonListener(
+      onBackButtonPressed: _handleBackButton,
       child: Scaffold(
         body: IndexedStack(
           index: _currentIndex,
