@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../data/repositories/auth_repository.dart';
 
@@ -144,7 +143,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 40),
         OutlinedButton(
-          onPressed: () => context.go('/auth/login'),
+          onPressed: () => Navigator.of(context).pop(),
           child: const Text('Voltar ao login'),
         ),
       ],

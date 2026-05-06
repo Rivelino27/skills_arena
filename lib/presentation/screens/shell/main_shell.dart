@@ -1,22 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-// ─── POR QUE BackButtonListener e não PopScope / WidgetsBindingObserver ───────
-// go_router v14+ faz uma verificação canPop() ANTES de chamar maybePop() no
-// seu delegate. Quando só existe a rota /app na pilha, canPop() == false e ele
-// retorna false sem chamar maybePop() → PopScope nunca dispara.
-// WidgetsBindingObserver.didPopRoute() tem o mesmo problema no predictive-back
-// do Android 13+ (Flutter chama maybePop() diretamente, não didPopRoute).
-//
-// BackButtonListener usa ChildBackButtonDispatcher.takePriority() para entrar
-// NA FILA do RootBackButtonDispatcher do go_router com prioridade máxima —
-// nosso callback é chamado ANTES da lógica de roteamento do go_router.
-// Se retornarmos false, go_router ainda processa (ex.: pop de telas fullscreen).
-// ─────────────────────────────────────────────────────────────────────────────
+// Sem GoRouter → PopScope(canPop:false) funciona exatamente como nav27.
+// O MaterialApp usa um Navigator padrão que chama maybePop() corretamente,
+// ativando onPopInvokedWithResult antes de qualquer saída do app.
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -60,39 +52,34 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  Future<bool> _handleBackButton() async {
-    // Telas empilhadas acima de /app via pushWithoutNavBar (rootNavigator:true)
-    // → deixa o go_router fazer o pop normal.
-    final rootNav = Navigator.maybeOf(context, rootNavigator: true);
-    if (rootNav != null && rootNav.canPop()) return false;
+  void _onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) return;
 
-    // Sub-tela dentro da aba atual (via pushWithNavBar → tab Navigator)
     final tabNav = _navKeys[_currentIndex].currentState;
     if (tabNav?.canPop() ?? false) {
       tabNav!.pop();
-      return true;
+      return;
     }
 
-    // Aba anterior no histórico
     if (_tabHistory.length > 1) {
       setState(() {
         _tabHistory.removeLast();
         _removeConsecutiveDuplicates();
         _currentIndex = _tabHistory.last;
       });
-      return true;
+      return;
     }
 
-    // Sem histórico → deixa o sistema sair do app
-    return false;
+    SystemNavigator.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return BackButtonListener(
-      onBackButtonPressed: _handleBackButton,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
       child: Scaffold(
         body: IndexedStack(
           index: _currentIndex,

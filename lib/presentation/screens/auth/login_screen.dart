@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../data/repositories/auth_repository.dart';
 import '../../widgets/auth/google_sign_in_button.dart';
+import '../shell/main_shell.dart';
+import 'forgot_password_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,7 +41,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = false);
     result.fold(
       (f) => _showError(f.message),
-      (_) => context.go('/app'),
+      (_) => _goToApp(),
     );
   }
 
@@ -50,7 +52,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = false);
     result.fold(
       (f) => _showError(f.message),
-      (_) => context.go('/app'),
+      (_) => _goToApp(),
+    );
+  }
+
+  void _goToApp() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
     );
   }
 
@@ -143,7 +152,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () => context.push('/auth/forgot-password'),
+                    onPressed: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
                     child: const Text('Esqueceu a senha?'),
                   ),
                 ),
@@ -183,7 +193,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     Text('Não tem conta? ', style: theme.textTheme.bodyMedium),
                     TextButton(
-                      onPressed: () => context.push('/auth/register'),
+                      onPressed: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const RegisterScreen())),
                       child: const Text('Cadastre-se'),
                     ),
                   ],
