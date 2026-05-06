@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/navigation/app_navigator.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/user_provider.dart';
+import 'nav_demo_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -26,6 +29,8 @@ class ProfileScreen extends ConsumerWidget {
           final email = user?.email ?? firebaseUser?.email ?? '';
           final isPremium = user?.isPremium ?? false;
           final photoUrl = user?.photoUrl ?? firebaseUser?.photoURL;
+          final username = user?.username;
+          final searchableByEmail = user?.searchableByEmail ?? true;
           final initial =
               displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
@@ -56,6 +61,16 @@ class ProfileScreen extends ConsumerWidget {
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
+              if (username != null) ...[
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    '@$username',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: cs.primary),
+                  ),
+                ),
+              ],
               const SizedBox(height: 4),
               Center(
                 child: Text(
@@ -110,6 +125,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
               ],
+              // ── Conta ───────────────────────────────────────────────────
               Text(
                 'CONTA',
                 style: theme.textTheme.labelMedium?.copyWith(
@@ -131,6 +147,20 @@ class ProfileScreen extends ConsumerWidget {
                         indent: 16,
                         endIndent: 16,
                         color: cs.outlineVariant),
+                    SwitchListTile(
+                      secondary: const Icon(Icons.manage_search_rounded),
+                      title: const Text('Buscável por e-mail'),
+                      subtitle: const Text(
+                          'Outros usuários podem te achar pelo e-mail'),
+                      value: searchableByEmail,
+                      onChanged: (v) => _toggleSearchableByEmail(
+                          firebaseUser?.uid, v),
+                    ),
+                    Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: cs.outlineVariant),
                     ListTile(
                       leading:
                           Icon(Icons.logout_rounded, color: cs.error),
@@ -143,11 +173,40 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              // ── Dev / Exemplos ──────────────────────────────────────────
+              Text(
+                'DESENVOLVEDOR',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.route_rounded),
+                  title: const Text('Telas de Exemplo'),
+                  subtitle: const Text('Demonstração de padrões de navegação'),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurfaceVariant),
+                  onTap: () => AppNavigator.pushWithNavBar(
+                      context, const NavDemoScreen()),
+                ),
+              ),
             ],
           );
         },
       ),
     );
+  }
+
+  Future<void> _toggleSearchableByEmail(String? uid, bool value) async {
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({'searchableByEmail': value});
   }
 
   void _showUpgradeDialog(BuildContext context) {

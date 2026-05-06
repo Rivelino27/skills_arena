@@ -4,8 +4,10 @@ class UserModel {
   final String id;
   final String email;
   final String? name;
+  final String? username;
   final String? photoUrl;
   final bool isPremium;
+  final bool searchableByEmail;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -13,8 +15,10 @@ class UserModel {
     required this.id,
     required this.email,
     this.name,
+    this.username,
     this.photoUrl,
     this.isPremium = false,
+    this.searchableByEmail = true,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -25,38 +29,43 @@ class UserModel {
       id: doc.id,
       email: data['email'] as String,
       name: data['name'] as String?,
+      username: data['username'] as String?,
       photoUrl: data['photoUrl'] as String?,
       isPremium: data['isPremium'] as bool? ?? false,
+      searchableByEmail: data['searchableByEmail'] as bool? ?? true,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'email': email,
-      'name': name,
-      'photoUrl': photoUrl,
-      'isPremium': isPremium,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
-    };
-  }
+  Map<String, dynamic> toMap() => {
+        'email': email,
+        'name': name,
+        'username': username,
+        'photoUrl': photoUrl,
+        'isPremium': isPremium,
+        'searchableByEmail': searchableByEmail,
+        'createdAt': Timestamp.fromDate(createdAt),
+        'updatedAt': Timestamp.fromDate(updatedAt),
+      };
 
   UserModel copyWith({
     String? email,
     String? name,
+    String? username,
     String? photoUrl,
     bool? isPremium,
-  }) {
-    return UserModel(
-      id: id,
-      email: email ?? this.email,
-      name: name ?? this.name,
-      photoUrl: photoUrl ?? this.photoUrl,
-      isPremium: isPremium ?? this.isPremium,
-      createdAt: createdAt,
-      updatedAt: DateTime.now(),
-    );
-  }
+    bool? searchableByEmail,
+  }) =>
+      UserModel(
+        id: id,
+        email: email ?? this.email,
+        name: name ?? this.name,
+        username: username ?? this.username,
+        photoUrl: photoUrl ?? this.photoUrl,
+        isPremium: isPremium ?? this.isPremium,
+        searchableByEmail: searchableByEmail ?? this.searchableByEmail,
+        createdAt: createdAt,
+        updatedAt: DateTime.now(),
+      );
 }

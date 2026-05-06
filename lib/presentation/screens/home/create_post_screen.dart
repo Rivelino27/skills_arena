@@ -79,6 +79,11 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                     label: Text('YouTube'),
                   ),
                   ButtonSegment(
+                    value: PostType.tiktok,
+                    icon: Icon(Icons.music_video_rounded),
+                    label: Text('TikTok'),
+                  ),
+                  ButtonSegment(
                     value: PostType.link,
                     icon: Icon(Icons.link_rounded),
                     label: Text('Link'),
@@ -140,6 +145,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         return 'Texto';
       case PostType.youtube:
         return 'URL do YouTube';
+      case PostType.tiktok:
+        return 'URL do TikTok';
       case PostType.link:
         return 'URL do link';
     }
@@ -151,6 +158,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         return 'O que você quer compartilhar?';
       case PostType.youtube:
         return 'https://youtube.com/watch?v=...';
+      case PostType.tiktok:
+        return 'https://www.tiktok.com/@usuario/video/...';
       case PostType.link:
         return 'https://...';
     }
@@ -162,6 +171,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         return Icons.text_fields_rounded;
       case PostType.youtube:
         return Icons.smart_display_rounded;
+      case PostType.tiktok:
+        return Icons.music_video_rounded;
       case PostType.link:
         return Icons.link_rounded;
     }

@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/navigation/app_navigator.dart';
+import '../../../data/models/comment_model.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../providers/post_provider.dart';
+import '../profile/user_profile_screen.dart';
 import 'create_post_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -39,8 +41,15 @@ class HomeScreen extends ConsumerWidget {
               itemBuilder: (_, i) => _PostCard(
                 post: posts[i],
                 myUid: myUid,
-                onLike: () =>
-                    ref.read(postRepositoryProvider).toggleLike(posts[i].id, myUid),
+                onLike: () => ref
+                    .read(postRepositoryProvider)
+                    .toggleLike(posts[i].id, myUid),
+                onShare: () =>
+                    ref.read(postRepositoryProvider).sharePost(posts[i]),
+                onViewProfile: () => AppNavigator.pushWithNavBar(
+                  context,
+                  UserProfileScreen(userId: posts[i].userId),
+                ),
               ),
             ),
           );
@@ -62,9 +71,16 @@ class _PostCard extends StatelessWidget {
   final PostModel post;
   final String myUid;
   final VoidCallback onLike;
+  final VoidCallback onShare;
+  final VoidCallback onViewProfile;
 
-  const _PostCard(
-      {required this.post, required this.myUid, required this.onLike});
+  const _PostCard({
+    required this.post,
+    required this.myUid,
+    required this.onLike,
+    required this.onShare,
+    required this.onViewProfile,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -77,79 +93,97 @@ class _PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundImage: post.userPhotoUrl != null
-                    ? NetworkImage(post.userPhotoUrl!)
-                    : null,
-                backgroundColor: cs.primaryContainer,
-                child: post.userPhotoUrl == null
-                    ? Text(
-                        post.userName.isNotEmpty
-                            ? post.userName[0].toUpperCase()
-                            : '?',
-                        style: TextStyle(color: cs.onPrimaryContainer),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(post.userName,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                    Text(_formatTime(post.createdAt),
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant)),
-                  ],
+          // Header — toca no avatar/nome para ver perfil
+          GestureDetector(
+            onTap: onViewProfile,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: post.userPhotoUrl != null
+                      ? NetworkImage(post.userPhotoUrl!)
+                      : null,
+                  backgroundColor: cs.primaryContainer,
+                  child: post.userPhotoUrl == null
+                      ? Text(
+                          post.userName.isNotEmpty
+                              ? post.userName[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(color: cs.onPrimaryContainer),
+                        )
+                      : null,
                 ),
-              ),
-              _PostTypeBadge(type: post.type),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(post.userName,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600)),
+                      Text(_formatTime(post.createdAt),
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                _PostTypeBadge(type: post.type),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          // Content
           _PostContent(post: post),
-          // Caption
           if (post.caption != null && post.caption!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(post.caption!, style: theme.textTheme.bodyMedium),
           ],
-          const SizedBox(height: 8),
-          // Footer — likes
-          InkWell(
-            onTap: onLike,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isLiked
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    size: 20,
-                    color: isLiked ? Colors.red : cs.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${post.likesCount}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: isLiked ? Colors.red : cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+          const SizedBox(height: 10),
+          // Footer — curtir / comentar / compartilhar
+          Row(
+            children: [
+              _ActionButton(
+                icon: isLiked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                label: '${post.likesCount}',
+                color: isLiked ? Colors.red : cs.onSurfaceVariant,
+                onTap: onLike,
               ),
-            ),
+              const SizedBox(width: 4),
+              _ActionButton(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: '${post.commentsCount}',
+                color: cs.onSurfaceVariant,
+                onTap: () => _showComments(context, post),
+              ),
+              const Spacer(),
+              _ActionButton(
+                icon: Icons.share_rounded,
+                label: 'Compartilhar',
+                color: cs.onSurfaceVariant,
+                onTap: onShare,
+              ),
+              const SizedBox(width: 8),
+              _ActionButton(
+                icon: Icons.send_rounded,
+                label: 'Mensagem',
+                color: cs.primary,
+                onTap: onViewProfile,
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  void _showComments(BuildContext context, PostModel post) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _CommentsSheet(post: post),
     );
   }
 
@@ -177,6 +211,8 @@ class _PostContent extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge);
       case PostType.youtube:
         return _YouTubeCard(post: post);
+      case PostType.tiktok:
+        return _TikTokCard(url: post.content);
       case PostType.link:
         return _LinkCard(url: post.content);
     }
@@ -200,44 +236,23 @@ class _YouTubeCard extends StatelessWidget {
         child: Stack(
           children: [
             if (thumbnail != null)
-              Image.network(
-                thumbnail,
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _NoThumbnail(cs: cs),
-              )
+              Image.network(thumbnail,
+                  width: double.infinity,
+                  height: 200,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _MediaPlaceholder(cs: cs, icon: Icons.smart_display_rounded))
             else
-              _NoThumbnail(cs: cs),
-            Positioned.fill(
+              _MediaPlaceholder(cs: cs, icon: Icons.smart_display_rounded),
+            const Positioned.fill(
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 36),
-                ),
+                child: _PlayButton(),
               ),
             ),
-            Positioned(
+            const Positioned(
               bottom: 8,
               left: 8,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text('YouTube',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold)),
-              ),
+              child: _Badge(text: 'YouTube', color: Colors.red),
             ),
           ],
         ),
@@ -251,18 +266,45 @@ class _YouTubeCard extends StatelessWidget {
   }
 }
 
-class _NoThumbnail extends StatelessWidget {
-  final ColorScheme cs;
-  const _NoThumbnail({required this.cs});
+class _TikTokCard extends StatelessWidget {
+  final String url;
+  const _TikTokCard({required this.url});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        height: 200,
-        color: cs.surfaceContainerHighest,
-        child: Icon(Icons.smart_display_rounded,
-            size: 48, color: cs.onSurfaceVariant),
-      );
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _launch(url),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Stack(
+          children: [
+            const Positioned.fill(child: Center(child: _PlayButton())),
+            const Positioned(
+              bottom: 8,
+              left: 8,
+              child: _Badge(text: '🎵 TikTok', color: Colors.black),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Icon(Icons.open_in_new_rounded,
+                  color: Colors.white.withValues(alpha: 0.7), size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 }
 
 class _LinkCard extends StatelessWidget {
@@ -287,18 +329,14 @@ class _LinkCard extends StatelessWidget {
             Icon(Icons.link_rounded, color: cs.primary),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                url,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.primary),
-              ),
+              child: Text(url,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13, color: cs.primary)),
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.open_in_new_rounded, size: 16, color: cs.primary),
+            Icon(Icons.open_in_new_rounded,
+                size: 16, color: cs.primary),
           ],
         ),
       ),
@@ -311,7 +349,53 @@ class _LinkCard extends StatelessWidget {
   }
 }
 
-// ─── Badges / empty ──────────────────────────────────────────────────────────
+// ─── Helpers visuais ──────────────────────────────────────────────────────────
+
+class _PlayButton extends StatelessWidget {
+  const _PlayButton();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: const BoxDecoration(
+            color: Colors.black54, shape: BoxShape.circle),
+        child: const Icon(Icons.play_arrow_rounded,
+            color: Colors.white, size: 36),
+      );
+}
+
+class _Badge extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _Badge({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+            color: color, borderRadius: BorderRadius.circular(4)),
+        child: Text(text,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold)),
+      );
+}
+
+class _MediaPlaceholder extends StatelessWidget {
+  final ColorScheme cs;
+  final IconData icon;
+  const _MediaPlaceholder({required this.cs, required this.icon});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        height: 200,
+        color: cs.surfaceContainerHighest,
+        child: Icon(icon, size: 48, color: cs.onSurfaceVariant),
+      );
+}
 
 class _PostTypeBadge extends StatelessWidget {
   final PostType type;
@@ -320,25 +404,251 @@ class _PostTypeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    IconData icon;
-    Color color;
     switch (type) {
       case PostType.text:
-        icon = Icons.text_fields_rounded;
-        color = cs.secondary;
-        break;
+        return Icon(Icons.text_fields_rounded, size: 18, color: cs.secondary);
       case PostType.youtube:
-        icon = Icons.smart_display_rounded;
-        color = Colors.red;
-        break;
+        return const Icon(Icons.smart_display_rounded,
+            size: 18, color: Colors.red);
+      case PostType.tiktok:
+        return const Icon(Icons.music_video_rounded,
+            size: 18, color: Colors.pink);
       case PostType.link:
-        icon = Icons.link_rounded;
-        color = cs.primary;
-        break;
+        return Icon(Icons.link_rounded, size: 18, color: cs.primary);
     }
-    return Icon(icon, size: 18, color: color);
   }
 }
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(fontSize: 12, color: color)),
+            ],
+          ),
+        ),
+      );
+}
+
+// ─── Comments Sheet ───────────────────────────────────────────────────────────
+
+class _CommentsSheet extends ConsumerStatefulWidget {
+  final PostModel post;
+  const _CommentsSheet({required this.post});
+
+  @override
+  ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
+}
+
+class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
+  final _ctrl = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _sending = true);
+    _ctrl.clear();
+    await ref
+        .read(postRepositoryProvider)
+        .addComment(postId: widget.post.id, text: text);
+    if (mounted) setState(() => _sending = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final commentsAsync =
+        ref.watch(commentsStreamProvider(widget.post.id));
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      builder: (_, scrollCtrl) => Column(
+        children: [
+          // Handle
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Text('Comentários',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          // List
+          Expanded(
+            child: commentsAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Erro: $e')),
+              data: (comments) {
+                if (comments.isEmpty) {
+                  return Center(
+                    child: Text('Sem comentários ainda.',
+                        style: TextStyle(color: cs.onSurfaceVariant)),
+                  );
+                }
+                return ListView.builder(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  itemCount: comments.length,
+                  itemBuilder: (_, i) => _CommentTile(comment: comments[i]),
+                );
+              },
+            ),
+          ),
+          // Input
+          SafeArea(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                    top: BorderSide(
+                        color: cs.outlineVariant, width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      decoration: InputDecoration(
+                        hintText: 'Escreva um comentário...',
+                        filled: true,
+                        fillColor: cs.surfaceContainerHighest,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: _sending ? null : _send,
+                    icon: _sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentTile extends StatelessWidget {
+  final CommentModel comment;
+  const _CommentTile({required this.comment});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final diff = DateTime.now().difference(comment.createdAt);
+    final time = diff.inHours < 1
+        ? '${diff.inMinutes}m'
+        : diff.inDays < 1
+            ? '${diff.inHours}h'
+            : '${diff.inDays}d';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundImage: comment.userPhotoUrl != null
+                ? NetworkImage(comment.userPhotoUrl!)
+                : null,
+            backgroundColor: cs.primaryContainer,
+            child: comment.userPhotoUrl == null
+                ? Text(comment.userName.isNotEmpty
+                    ? comment.userName[0].toUpperCase()
+                    : '?')
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(comment.userName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                    const SizedBox(width: 6),
+                    Text(time,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(comment.text,
+                    style: const TextStyle(fontSize: 14)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty / providers aux ────────────────────────────────────────────────────
 
 class _EmptyFeed extends StatelessWidget {
   final VoidCallback onPost;
@@ -354,7 +664,8 @@ class _EmptyFeed extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.dynamic_feed_rounded, size: 64, color: cs.onSurfaceVariant),
+            Icon(Icons.dynamic_feed_rounded,
+                size: 64, color: cs.onSurfaceVariant),
             const SizedBox(height: 16),
             Text('Nenhuma publicação ainda',
                 style: theme.textTheme.titleMedium),

@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "492117491640",
+    "project_id": "skills-arena-c2c71",
+    "storage_bucket": "skills-arena-c2c71.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:492117491640:android:3a0e63d78f085e34c3594d",
+        "android_client_info": {
+          "package_name": "com.r27systems.skills_arena"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "492117491640-pl1rt4cr4nl8a66ei59jshv1fsik6m81.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.r27systems.skills_arena",
+            "certificate_hash": "49fba62552eeb056994c33aab1229366845267ff"
+          }
+        },
+        {
+          "client_id": "492117491640-naqhhokar6nnr5pch6tcuj66o7nj1lk5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNox_MHUiLbtJKldUC5Wtezw3UfAuOJOM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "492117491640-naqhhokar6nnr5pch6tcuj66o7nj1lk5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "492117491640-512olk2ok7srtru2g5ceh8pq5sgugigm.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.r27systems.skillsArena"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

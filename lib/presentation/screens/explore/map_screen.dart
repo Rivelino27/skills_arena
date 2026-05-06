@@ -66,6 +66,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
   Position? _userPosition;
   bool _loadingLocation = true;
+  bool _pinMode = false;
+  LatLng _pinPosition = const LatLng(-23.5505, -46.6333);
 
   static const _defaultCenter = LatLng(-23.5505, -46.6333); // São Paulo
 
@@ -160,6 +162,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
                   : _defaultCenter,
               initialZoom: 13.0,
+              onMapEvent: (event) {
+                if (_pinMode && event is MapEventMove) {
+                  setState(() => _pinPosition = event.camera.center);
+                }
+              },
             ),
             children: [
               TileLayer(
@@ -268,55 +275,93 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'locate_me',
-            tooltip: 'Minha localização',
-            onPressed: _centerOnUser,
-            child: const Icon(Icons.my_location_rounded),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton.small(
-            heroTag: 'find_players',
-            tooltip: 'Buscar jogadores',
-            backgroundColor: cs.tertiary,
-            foregroundColor: cs.onTertiary,
-            onPressed: () => AppNavigator.pushWithNavBar(
-              context,
-              FindPlayersScreen(
-                userLat: _userPosition?.latitude,
-                userLng: _userPosition?.longitude,
+          // ── Pin placement overlay ──────────────────────────────────────
+          if (_pinMode) ...[
+            const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.location_on_rounded,
+                      size: 48, color: Colors.red),
+                  SizedBox(height: 44),
+                ],
               ),
             ),
-            child: const Icon(Icons.people_alt_rounded),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'add_venue',
-            tooltip: 'Adicionar quadra',
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              final ok = await AppNavigator.pushWithoutNavBar<bool>(
-                context,
-                AddVenueScreen(
-                  userLat: _userPosition?.latitude,
-                  userLng: _userPosition?.longitude,
+            const Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Card(
+                  color: Colors.black87,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Text(
+                      'Mova o mapa para posicionar o pin',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
                 ),
-              );
-              if (ok == true && mounted) {
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Quadra adicionada!')),
-                );
-              }
-            },
-            child: const Icon(Icons.add_location_alt_rounded),
-          ),
+              ),
+            ),
+          ],
         ],
       ),
+      floatingActionButton: _pinMode
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'pin_cancel',
+                  tooltip: 'Cancelar',
+                  backgroundColor: cs.errorContainer,
+                  foregroundColor: cs.onErrorContainer,
+                  onPressed: () => setState(() => _pinMode = false),
+                  child: const Icon(Icons.close_rounded),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.extended(
+                  heroTag: 'pin_confirm',
+                  label: const Text('Confirmar local'),
+                  icon: const Icon(Icons.check_rounded),
+                  onPressed: _confirmPin,
+                ),
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'locate_me',
+                  tooltip: 'Minha localização',
+                  onPressed: _centerOnUser,
+                  child: const Icon(Icons.my_location_rounded),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
+                  heroTag: 'find_players',
+                  tooltip: 'Buscar jogadores',
+                  backgroundColor: cs.tertiary,
+                  foregroundColor: cs.onTertiary,
+                  onPressed: () => AppNavigator.pushWithNavBar(
+                    context,
+                    FindPlayersScreen(
+                      userLat: _userPosition?.latitude,
+                      userLng: _userPosition?.longitude,
+                    ),
+                  ),
+                  child: const Icon(Icons.people_alt_rounded),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton(
+                  heroTag: 'add_venue',
+                  tooltip: 'Adicionar quadra',
+                  onPressed: _enterPinMode,
+                  child: const Icon(Icons.add_location_alt_rounded),
+                ),
+              ],
+            ),
     );
   }
 
@@ -325,6 +370,33 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _mapController.move(
         LatLng(_userPosition!.latitude, _userPosition!.longitude),
         15.0,
+      );
+    }
+  }
+
+  void _enterPinMode() {
+    final center = _userPosition != null
+        ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
+        : _mapController.camera.center;
+    setState(() {
+      _pinPosition = center;
+      _pinMode = true;
+    });
+  }
+
+  Future<void> _confirmPin() async {
+    setState(() => _pinMode = false);
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await AppNavigator.pushWithoutNavBar<bool>(
+      context,
+      AddVenueScreen(
+        userLat: _pinPosition.latitude,
+        userLng: _pinPosition.longitude,
+      ),
+    );
+    if (ok == true && mounted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Quadra adicionada!')),
       );
     }
   }

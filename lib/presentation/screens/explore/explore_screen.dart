@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../providers/sports_provider.dart';
+import '../profile/search_users_screen.dart';
 import 'map_screen.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
@@ -31,7 +32,17 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Explorar')),
+      appBar: AppBar(
+        title: const Text('Explorar'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_search_rounded),
+            tooltip: 'Buscar usuários',
+            onPressed: () => AppNavigator.pushWithNavBar(
+                context, const SearchUsersScreen()),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [

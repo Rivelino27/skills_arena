@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum PostType { text, youtube, link }
+enum PostType { text, youtube, tiktok, link }
 
 class PostModel {
   final String id;
@@ -12,6 +12,8 @@ class PostModel {
   final String? caption;
   final int likesCount;
   final List<String> likedBy;
+  final int commentsCount;
+  final String? venueId;
   final DateTime createdAt;
 
   const PostModel({
@@ -24,6 +26,8 @@ class PostModel {
     this.caption,
     this.likesCount = 0,
     this.likedBy = const [],
+    this.commentsCount = 0,
+    this.venueId,
     required this.createdAt,
   });
 
@@ -62,6 +66,8 @@ class PostModel {
       caption: d['caption'] as String?,
       likesCount: (d['likesCount'] as num?)?.toInt() ?? 0,
       likedBy: List<String>.from(d['likedBy'] as List? ?? []),
+      commentsCount: (d['commentsCount'] as num?)?.toInt() ?? 0,
+      venueId: d['venueId'] as String?,
       createdAt: (d['createdAt'] as Timestamp).toDate(),
     );
   }
@@ -75,6 +81,8 @@ class PostModel {
         'caption': caption,
         'likesCount': likesCount,
         'likedBy': likedBy,
+        'commentsCount': commentsCount,
+        'venueId': venueId,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 }

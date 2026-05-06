@@ -54,7 +54,7 @@ migrate_working_dir/
 /linux/
 /macos/
 /windows/
-/android/
+
 /web/
 .packages
 .flutter-plugins
