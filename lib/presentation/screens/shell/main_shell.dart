@@ -1,79 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../providers/tab_nav_provider.dart';
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-class MainShell extends ConsumerStatefulWidget {
+class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
   @override
-  ConsumerState<MainShell> createState() => _MainShellState();
+  State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends ConsumerState<MainShell> {
-  final List<GlobalKey<NavigatorState>> _navKeys =
+class _MainShellState extends State<MainShell> {
+  int _currentIndex = 0;
+  final List<int> _tabHistory = [0];
+
+  final List<GlobalKey<NavigatorState>> _navigatorKeys =
       List.generate(4, (_) => GlobalKey<NavigatorState>());
 
   double _dragStartX = 0.0;
   double _dragDeltaX = 0.0;
 
-  void _onTabTapped(int index) {
-    final current = ref.read(tabNavProvider).currentIndex;
-    if (index == current) {
-      _navKeys[index].currentState?.popUntil((route) => route.isFirst);
-      return;
+  void _removeConsecutiveDuplicates() {
+    for (int i = _tabHistory.length - 1; i > 0; i--) {
+      if (_tabHistory[i] == _tabHistory[i - 1]) {
+        _tabHistory.removeAt(i);
+      }
     }
-    ref.read(tabNavProvider.notifier).selectTab(index);
+  }
+
+  void _onTabTapped(int index) {
+    if (index == _currentIndex) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    } else {
+      setState(() {
+        if (_tabHistory.last != index) {
+          if (_tabHistory.contains(index) && index != 0) {
+            _tabHistory.remove(index);
+          }
+          _tabHistory.add(index);
+          _removeConsecutiveDuplicates();
+        }
+        _currentIndex = index;
+      });
+    }
   }
 
   void _onPopInvokedWithResult(bool didPop, Object? result) {
     if (didPop) return;
 
-    final current = ref.read(tabNavProvider).currentIndex;
-    final currentNavigator = _navKeys[current].currentState;
+    final currentNavigator = _navigatorKeys[_currentIndex].currentState;
     if (currentNavigator?.canPop() ?? false) {
       currentNavigator?.pop();
-      return;
+    } else if (_tabHistory.length > 1) {
+      setState(() {
+        _tabHistory.removeLast();
+        _removeConsecutiveDuplicates();
+        _currentIndex = _tabHistory.last;
+      });
+    } else {
+      SystemNavigator.pop();
     }
-
-    final stepped = ref.read(tabNavProvider.notifier).stepBack();
-    if (stepped) return;
-
-    SystemNavigator.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final currentIndex = ref.watch(tabNavProvider).currentIndex;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: _onPopInvokedWithResult,
       child: Scaffold(
         body: IndexedStack(
-          index: currentIndex,
-          children: List.generate(4, _buildTabNavigator),
+          index: _currentIndex,
+          children: List.generate(4, _buildNavigator),
         ),
         bottomNavigationBar: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (d) {
-            _dragStartX = d.globalPosition.dx;
+          onHorizontalDragStart: (details) {
+            _dragStartX = details.globalPosition.dx;
             _dragDeltaX = 0.0;
           },
-          onHorizontalDragUpdate: (d) {
-            _dragDeltaX = d.globalPosition.dx - _dragStartX;
+          onHorizontalDragUpdate: (details) {
+            _dragDeltaX = details.globalPosition.dx - _dragStartX;
           },
-          onHorizontalDragEnd: (_) {
+          onHorizontalDragEnd: (details) {
             if (_dragDeltaX.abs() > 50) {
-              final newIndex = _dragDeltaX > 0
-                  ? (currentIndex > 0 ? currentIndex - 1 : 3)
-                  : (currentIndex < 3 ? currentIndex + 1 : 0);
+              int newIndex;
+              if (_dragDeltaX > 0) {
+                newIndex = _currentIndex > 0 ? _currentIndex - 1 : 3;
+              } else {
+                newIndex = _currentIndex < 3 ? _currentIndex + 1 : 0;
+              }
               _onTabTapped(newIndex);
             }
           },
@@ -84,7 +104,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               ),
             ),
             child: NavigationBar(
-              selectedIndex: currentIndex,
+              selectedIndex: _currentIndex,
               onDestinationSelected: _onTabTapped,
               backgroundColor: cs.surface,
               elevation: 0,
@@ -118,7 +138,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Widget _buildTabNavigator(int index) {
+  Widget _buildNavigator(int index) {
     const screens = [
       HomeScreen(),
       ExploreScreen(),
@@ -126,7 +146,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       ProfileScreen(),
     ];
     return Navigator(
-      key: _navKeys[index],
+      key: _navigatorKeys[index],
       onGenerateRoute: (settings) => MaterialPageRoute(
         builder: (_) => screens[index],
       ),

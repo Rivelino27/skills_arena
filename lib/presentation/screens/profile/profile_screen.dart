@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/app_navigator.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../../providers/tab_nav_provider.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
 import 'nav_demo_screen.dart';
@@ -256,7 +255,6 @@ class ProfileScreen extends ConsumerWidget {
     if (confirmed != true) return;
     await ref.read(authRepositoryProvider).signOut();
     if (!context.mounted) return;
-    ref.read(tabNavProvider.notifier).reset();
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
