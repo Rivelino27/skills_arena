@@ -19,7 +19,7 @@ W/Firestore(11362): (24.11.0) [Firestore]: Write failed at posts/XOU4xHhvw9cjHFh
 
 
 
-<<_________________ past :
+<<_______________ past :
 
 falta poder comentar em postagens, mandar mensagens para a pessoas da postagem clicando nela e vendo o perfil dela.
 A pessoa pode postar links do tik tok também nas postagens.
