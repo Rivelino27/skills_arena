@@ -19,13 +19,15 @@ service cloud.firestore {
     }
 
     // ── Sports venues (quadras) ───────────────────────────────────────────
+    // Field: `addedBy` (not `createdBy`)
     match /sports_venues/{venueId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.addedBy == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;
     }
 
     // ── Player availability ───────────────────────────────────────────────
+    // Field: `userId`
     match /player_availability/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
@@ -33,23 +35,30 @@ service cloud.firestore {
     }
 
     // ── Posts ─────────────────────────────────────────────────────────────
+    // Field: `userId` (post author).
+    // Anyone signed-in can update `likedBy`, `likesCount`, `commentsCount`
+    // (used by toggleLike + addComment). Other fields are author-only.
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['likedBy', 'likesCount', 'commentsCount'])
+      );
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
 
+      // Comments — field: `userId`
       match /comments/{commentId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
       }
     }
 
     // ── Chats ─────────────────────────────────────────────────────────────
-    // A chat doc must contain `participants: [uidA, uidB]`.
-    // Only those two UIDs can read or write the chat or its messages.
-    // `resource == null` allows reading a non-existent doc (needed for
-    // getOrCreateConversation which probes the doc before creating it).
+    // Field: `participants` (list of two UIDs).
+    // `resource == null` lets `getOrCreateConversation` probe before creating.
     match /chats/{chatId} {
       allow get: if isSignedIn() && (
         resource == null || request.auth.uid in resource.data.participants
@@ -61,13 +70,18 @@ service cloud.firestore {
       allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow delete: if false;
 
+      // Messages — field: `senderId`
       match /messages/{messageId} {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
         allow create: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
-        allow update, delete: if false;
+        // Allow update so future read-receipts / reactions can patch the message;
+        // only the sender or another participant can patch.
+        allow update: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow delete: if false;
       }
     }
   }
