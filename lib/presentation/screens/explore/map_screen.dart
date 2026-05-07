@@ -13,8 +13,11 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../data/repositories/chat_repository.dart';
+import '../../../data/repositories/social_repository.dart';
 import '../../providers/sports_provider.dart';
+import '../../providers/user_provider.dart';
 import '../chat/conversation_screen.dart';
 import 'add_venue_screen.dart';
 import 'find_players_screen.dart';
@@ -194,6 +197,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         LatLng(pos.latitude, pos.longitude),
         14.0,
       );
+      // Silently push the resolved location to the user doc so visibleOnMap /
+      // markAvailability can use the latest known coords without re-prompting.
+      final me = ref.read(currentUserProvider).valueOrNull;
+      if (me != null) {
+        await ref.read(socialRepositoryProvider).setVisibleOnMap(
+              visible: me.visibleOnMap,
+              lat: pos.latitude,
+              lng: pos.longitude,
+            );
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingLocation = false);
     }
@@ -463,6 +476,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             ),
+          // ── Counter chips (top-right) ──────────────────────────────────
+          if (!_pinMode)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _CountChip(
+                    icon: Icons.people_alt_rounded,
+                    color: cs.tertiary,
+                    label: '${filteredPlayers.length} jogador'
+                        '${filteredPlayers.length == 1 ? '' : 'es'}',
+                    onTap: () =>
+                        _showPlayersListSheet(context, filteredPlayers),
+                  ),
+                  const SizedBox(height: 8),
+                  _CountChip(
+                    icon: Icons.place_rounded,
+                    color: cs.primary,
+                    label: '${filteredVenues.length} quadra'
+                        '${filteredVenues.length == 1 ? '' : 's'}',
+                    onTap: () =>
+                        _showVenuesListSheet(context, filteredVenues),
+                  ),
+                ],
+              ),
+            ),
           // ── Pin placement overlay ──────────────────────────────────────
           if (_pinMode) ...[
             const Center(
@@ -680,6 +721,47 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       },
     );
   }
+
+  void _showPlayersListSheet(
+      BuildContext context, List<PlayerAvailabilityModel> players) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PlayersListSheet(
+        players: players,
+        userLat: _userPosition?.latitude,
+        userLng: _userPosition?.longitude,
+      ),
+    );
+  }
+
+  void _showVenuesListSheet(
+      BuildContext context, List<SportsVenueModel> venues) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => _VenuesListSheet(
+        venues: venues,
+        userLat: _userPosition?.latitude,
+        userLng: _userPosition?.longitude,
+        onTapVenue: (v) {
+          Navigator.of(sheetCtx).pop();
+          AppNavigator.pushWithoutNavBar(
+            context,
+            VenueDetailScreen(
+              venue: v,
+              userLat: _userPosition?.latitude,
+              userLng: _userPosition?.longitude,
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -852,3 +934,409 @@ class _RadiusSheet extends ConsumerWidget {
     );
   }
 }
+
+// ─── Counter chip ───────────────────────────────────────────────────────────
+
+class _CountChip extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+
+  const _CountChip({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(24),
+      color: Theme.of(context).cardColor,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Players list sheet (multi-select + group chat creator) ────────────────
+
+class _PlayersListSheet extends ConsumerStatefulWidget {
+  final List<PlayerAvailabilityModel> players;
+  final double? userLat;
+  final double? userLng;
+
+  const _PlayersListSheet({
+    required this.players,
+    this.userLat,
+    this.userLng,
+  });
+
+  @override
+  ConsumerState<_PlayersListSheet> createState() =>
+      _PlayersListSheetState();
+}
+
+class _PlayersListSheetState extends ConsumerState<_PlayersListSheet> {
+  final Set<String> _selected = {};
+  final TextEditingController _groupNameCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _groupNameCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isSelectMode => _selected.isNotEmpty;
+
+  void _toggle(String uid) {
+    setState(() {
+      if (_selected.contains(uid)) {
+        _selected.remove(uid);
+      } else {
+        _selected.add(uid);
+      }
+    });
+  }
+
+  Future<void> _openSingleChat(PlayerAvailabilityModel p) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final outerCtx = context;
+    final messenger = ScaffoldMessenger.of(outerCtx);
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: p.userId,
+                otherName: p.userName,
+                otherPhoto: p.userPhotoUrl,
+              );
+      if (!outerCtx.mounted) return;
+      Navigator.of(outerCtx).pop();
+      AppNavigator.pushWithNavBar(
+        outerCtx,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
+  }
+
+  Future<void> _createGroup() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final outerCtx = context;
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    // Hydrate UserModels for selected uids from the player list.
+    final selectedPlayers = widget.players
+        .where((p) => _selected.contains(p.userId))
+        .toList();
+    final members = selectedPlayers
+        .map((p) => UserModel(
+              id: p.userId,
+              email: '',
+              name: p.userName,
+              photoUrl: p.userPhotoUrl,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ))
+        .toList();
+    try {
+      final name = _groupNameCtrl.text.trim();
+      final conv = await ref.read(chatRepositoryProvider).createGroupChat(
+            members: members,
+            groupName: name.isEmpty ? null : name,
+          );
+      if (!outerCtx.mounted) return;
+      Navigator.of(outerCtx).pop();
+      AppNavigator.pushWithNavBar(
+        outerCtx,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    final blocked = me?.blockedUsers ?? const <String>[];
+    final visible = widget.players
+        .where((p) => !blocked.contains(p.userId))
+        .toList();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      minChildSize: 0.3,
+      builder: (_, scrollCtrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.people_alt_rounded, color: cs.tertiary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isSelectMode
+                        ? '${_selected.length} selecionado(s)'
+                        : 'Jogadores na área (${visible.length})',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (_isSelectMode)
+                  TextButton(
+                    onPressed: () => setState(_selected.clear),
+                    child: const Text('Limpar'),
+                  ),
+              ],
+            ),
+            if (!_isSelectMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Text(
+                  'Toque para conversar · segure para selecionar e criar grupo.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+            const Divider(height: 16),
+            Expanded(
+              child: visible.isEmpty
+                  ? Center(
+                      child: Text('Ninguém por perto agora.',
+                          style: TextStyle(color: cs.onSurfaceVariant)),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 76),
+                      itemBuilder: (_, i) {
+                        final p = visible[i];
+                        final selected = _selected.contains(p.userId);
+                        final dist = (widget.userLat == null ||
+                                widget.userLng == null)
+                            ? null
+                            : GeoUtils.distanceKm(widget.userLat!,
+                                widget.userLng!, p.lat, p.lng);
+                        return ListTile(
+                          leading: Stack(
+                            children: [
+                              CircleAvatar(
+                                backgroundImage: p.userPhotoUrl != null
+                                    ? NetworkImage(p.userPhotoUrl!)
+                                    : null,
+                                backgroundColor: cs.primaryContainer,
+                                child: p.userPhotoUrl == null
+                                    ? Text(p.userName.isNotEmpty
+                                        ? p.userName[0].toUpperCase()
+                                        : '?')
+                                    : null,
+                              ),
+                              if (selected)
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: cs.primary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: cs.surface, width: 2),
+                                    ),
+                                    padding: const EdgeInsets.all(2),
+                                    child: Icon(Icons.check,
+                                        size: 12, color: cs.onPrimary),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          title: Text(p.userName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '${p.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}',
+                          ),
+                          onTap: _isSelectMode
+                              ? () => _toggle(p.userId)
+                              : () => _openSingleChat(p),
+                          onLongPress: () => _toggle(p.userId),
+                          selected: selected,
+                          selectedTileColor:
+                              cs.primaryContainer.withValues(alpha: 0.3),
+                        );
+                      },
+                    ),
+            ),
+            if (_isSelectMode)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    0, 8, 0, MediaQuery.of(context).viewInsets.bottom + 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _groupNameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nome do grupo (opcional)',
+                        prefixIcon: Icon(Icons.group_rounded),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _createGroup,
+                      icon: const Icon(Icons.chat_rounded),
+                      label: Text(
+                        _selected.length == 1
+                            ? 'Conversar com 1 jogador'
+                            : 'Criar grupo (${_selected.length})',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Venues list sheet ─────────────────────────────────────────────────────
+
+class _VenuesListSheet extends StatelessWidget {
+  final List<SportsVenueModel> venues;
+  final double? userLat;
+  final double? userLng;
+  final ValueChanged<SportsVenueModel> onTapVenue;
+
+  const _VenuesListSheet({
+    required this.venues,
+    required this.onTapVenue,
+    this.userLat,
+    this.userLng,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final sorted = [...venues];
+    if (userLat != null && userLng != null) {
+      sorted.sort((a, b) {
+        final da = GeoUtils.distanceKm(userLat!, userLng!, a.lat, a.lng);
+        final db = GeoUtils.distanceKm(userLat!, userLng!, b.lat, b.lng);
+        return da.compareTo(db);
+      });
+    }
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      minChildSize: 0.3,
+      builder: (_, scrollCtrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.place_rounded, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Quadras na área (${sorted.length})',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Expanded(
+              child: sorted.isEmpty
+                  ? Center(
+                      child: Text('Nenhuma quadra cadastrada por perto.',
+                          style: TextStyle(color: cs.onSurfaceVariant)),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: sorted.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 60),
+                      itemBuilder: (_, i) {
+                        final v = sorted[i];
+                        final dist = (userLat == null || userLng == null)
+                            ? null
+                            : GeoUtils.distanceKm(
+                                userLat!, userLng!, v.lat, v.lng);
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                _sportColor(v.sport).withValues(alpha: 0.2),
+                            child: Icon(_sportIcon(v.sport),
+                                color: _sportColor(v.sport), size: 20),
+                          ),
+                          title: Text(v.name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '${v.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}',
+                          ),
+                          trailing: const Icon(
+                              Icons.chevron_right_rounded),
+                          onTap: () => onTapVenue(v),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

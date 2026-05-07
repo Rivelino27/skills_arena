@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/chat_model.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/user_provider.dart';
 import 'conversation_screen.dart';
 import 'new_conversation_screen.dart';
 
@@ -14,14 +15,21 @@ class ChatScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final convsAsync = ref.watch(conversationsStreamProvider);
+    final me = ref.watch(currentUserProvider).valueOrNull;
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final blocked = me?.blockedUsers ?? const <String>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mensagens')),
       body: convsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
-        data: (convs) {
+        data: (allConvs) {
+          // Hide 1-1 chats where the other participant is blocked.
+          final convs = allConvs.where((c) {
+            if (c.isGroup) return true;
+            return !blocked.contains(c.otherUid(myUid));
+          }).toList();
           if (convs.isEmpty) {
             return _EmptyState(
               onNewChat: () => AppNavigator.pushWithNavBar(
@@ -70,8 +78,8 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final name = conv.otherName(myUid);
-    final photo = conv.otherPhoto(myUid);
+    final name = conv.displayTitle(myUid);
+    final photo = conv.isGroup ? null : conv.otherPhoto(myUid);
 
     return ListTile(
       contentPadding:
@@ -79,16 +87,31 @@ class _ConversationTile extends StatelessWidget {
       leading: CircleAvatar(
         radius: 26,
         backgroundImage: photo != null ? NetworkImage(photo) : null,
-        backgroundColor: cs.primaryContainer,
-        child: photo == null
-            ? Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: TextStyle(color: cs.onPrimaryContainer),
-              )
-            : null,
+        backgroundColor:
+            conv.isGroup ? cs.tertiaryContainer : cs.primaryContainer,
+        child: photo != null
+            ? null
+            : conv.isGroup
+                ? Icon(Icons.group_rounded, color: cs.onTertiaryContainer)
+                : Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(color: cs.onPrimaryContainer),
+                  ),
       ),
-      title: Text(name,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
+      title: Row(
+        children: [
+          if (conv.isGroup) ...[
+            Icon(Icons.group_rounded, size: 14, color: cs.tertiary),
+            const SizedBox(width: 4),
+          ],
+          Expanded(
+            child: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
       subtitle: Text(
         conv.lastMessage ?? 'Inicie a conversa',
         maxLines: 1,

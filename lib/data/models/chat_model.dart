@@ -7,6 +7,8 @@ class ConversationModel {
   final Map<String, String?> participantPhotos;
   final String? lastMessage;
   final DateTime? lastMessageAt;
+  final bool isGroup;
+  final String? groupName;
 
   const ConversationModel({
     required this.id,
@@ -15,6 +17,8 @@ class ConversationModel {
     required this.participantPhotos,
     this.lastMessage,
     this.lastMessageAt,
+    this.isGroup = false,
+    this.groupName,
   });
 
   String otherUid(String myUid) =>
@@ -24,6 +28,20 @@ class ConversationModel {
       participantNames[otherUid(myUid)] ?? 'Usuário';
 
   String? otherPhoto(String myUid) => participantPhotos[otherUid(myUid)];
+
+  /// Title shown for the conversation in lists/detail header.
+  String displayTitle(String myUid) {
+    if (isGroup) {
+      if (groupName != null && groupName!.trim().isNotEmpty) return groupName!;
+      // Fallback: comma-separated names of other participants.
+      final others = participants
+          .where((id) => id != myUid)
+          .map((id) => participantNames[id] ?? 'Usuário')
+          .join(', ');
+      return others.isEmpty ? 'Grupo' : others;
+    }
+    return otherName(myUid);
+  }
 
   factory ConversationModel.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
@@ -38,6 +56,8 @@ class ConversationModel {
       lastMessageAt: d['lastMessageAt'] != null
           ? (d['lastMessageAt'] as Timestamp).toDate()
           : null,
+      isGroup: d['isGroup'] as bool? ?? false,
+      groupName: d['groupName'] as String?,
     );
   }
 
@@ -48,6 +68,8 @@ class ConversationModel {
         'lastMessage': lastMessage,
         'lastMessageAt':
             lastMessageAt != null ? Timestamp.fromDate(lastMessageAt!) : null,
+        'isGroup': isGroup,
+        'groupName': groupName,
       };
 }
 

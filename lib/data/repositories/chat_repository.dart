@@ -4,20 +4,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
+import 'social_repository.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
-  return ChatRepository(firestore: FirebaseFirestore.instance);
+  return ChatRepository(
+    firestore: FirebaseFirestore.instance,
+    social: ref.watch(socialRepositoryProvider),
+  );
 });
 
 class ChatRepository {
   final FirebaseFirestore _db;
+  final SocialRepository _social;
 
-  ChatRepository({required FirebaseFirestore firestore}) : _db = firestore;
+  ChatRepository({
+    required FirebaseFirestore firestore,
+    required SocialRepository social,
+  })  : _db = firestore,
+        _social = social;
 
   CollectionReference<Map<String, dynamic>> get _chats =>
       _db.collection('chats');
 
-  /// Deterministic chat ID — always the same regardless of who initiates
+  /// Deterministic chat ID for 1-1 — always the same regardless of who initiates
   static String buildChatId(String uid1, String uid2) {
     final sorted = [uid1, uid2]..sort();
     return '${sorted[0]}_${sorted[1]}';
@@ -36,12 +45,21 @@ class ChatRepository {
       .snapshots()
       .map((s) => s.docs.map(MessageModel.fromFirestore).toList());
 
+  /// Throws an exception when one of the users blocked the other.
   Future<ConversationModel> getOrCreateConversation({
     required String otherUid,
     required String otherName,
     String? otherPhoto,
   }) async {
     final me = FirebaseAuth.instance.currentUser!;
+    final blocked = await _social.isBlockedEitherWay(
+      myUid: me.uid,
+      otherUid: otherUid,
+    );
+    if (blocked) {
+      throw Exception(
+          'Não é possível abrir conversa: usuário bloqueado.');
+    }
     final id = buildChatId(me.uid, otherUid);
     final ref = _chats.doc(id);
     final doc = await ref.get();
@@ -59,6 +77,51 @@ class ChatRepository {
       return conv;
     }
     return ConversationModel.fromFirestore(doc);
+  }
+
+  /// Creates a group chat with N participants. Filters out anyone the
+  /// current user has blocked or is blocked by.
+  Future<ConversationModel> createGroupChat({
+    required List<UserModel> members,
+    String? groupName,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser!;
+
+    // Filter out blocked-either-way users.
+    final filtered = <UserModel>[];
+    for (final u in members) {
+      if (u.id == me.uid) continue;
+      final blocked = await _social.isBlockedEitherWay(
+        myUid: me.uid,
+        otherUid: u.id,
+      );
+      if (!blocked) filtered.add(u);
+    }
+    if (filtered.isEmpty) {
+      throw Exception('Selecione ao menos um usuário disponível.');
+    }
+
+    final allUids = [me.uid, ...filtered.map((u) => u.id)];
+    final names = <String, String>{
+      me.uid: me.displayName ?? 'Eu',
+      for (final u in filtered) u.id: u.name ?? 'Usuário',
+    };
+    final photos = <String, String?>{
+      me.uid: me.photoURL,
+      for (final u in filtered) u.id: u.photoUrl,
+    };
+
+    final docRef = await _chats.add({
+      'participants': allUids,
+      'participantNames': names,
+      'participantPhotos': photos,
+      'lastMessage': null,
+      'lastMessageAt': Timestamp.now(),
+      'isGroup': true,
+      'groupName': groupName,
+    });
+    final snap = await docRef.get();
+    return ConversationModel.fromFirestore(snap);
   }
 
   Future<void> sendMessage(String chatId, String text) async {

@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/app_navigator.dart';
+import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/repositories/social_repository.dart';
+import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
+import '../../providers/user_provider.dart';
 import '../profile/search_users_screen.dart';
 import 'map_screen.dart';
 
@@ -30,6 +34,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final cs = theme.colorScheme;
     final venues = ref.watch(venuesStreamProvider).valueOrNull ?? [];
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
+    final myAvail = ref.watch(myAvailabilityProvider).valueOrNull;
+    final me = ref.watch(currentUserProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -46,6 +52,16 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [
+          // ── Quero jogar hoje (status do usuário) ───────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _PlayStatusCard(
+              availability: myAvail,
+              visibleOnMap: me?.visibleOnMap ?? false,
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // Map card
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -141,6 +157,316 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   }
 }
 
+// ─── Quero jogar hoje — status card ─────────────────────────────────────────
+
+class _PlayStatusCard extends ConsumerWidget {
+  final PlayerAvailabilityModel? availability;
+  final bool visibleOnMap;
+
+  const _PlayStatusCard({
+    required this.availability,
+    required this.visibleOnMap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isActive = availability != null;
+    final remaining = isActive
+        ? availability!.expiresAt.difference(DateTime.now())
+        : Duration.zero;
+
+    String remainingText() {
+      if (!isActive) return '';
+      final h = remaining.inHours;
+      final m = remaining.inMinutes.remainder(60);
+      return h > 0 ? 'expira em ${h}h ${m}m' : 'expira em ${m}m';
+    }
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isActive
+              ? cs.primary.withValues(alpha: 0.7)
+              : cs.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isActive
+                      ? Icons.sports_score_rounded
+                      : Icons.sports_outlined,
+                  color: isActive ? cs.primary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isActive
+                            ? 'Você quer jogar — ${availability!.sport}'
+                            : 'Quero jogar hoje',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        isActive
+                            ? '${availability!.radiusKm.toStringAsFixed(0)} km · ${remainingText()}'
+                            : 'Ative para que outros jogadores te encontrem.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: isActive,
+                  onChanged: (v) async {
+                    if (v) {
+                      await _showMarkSheet(context, ref);
+                    } else {
+                      await ref
+                          .read(sportsRepositoryProvider)
+                          .removeAvailability();
+                    }
+                  },
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            Row(
+              children: [
+                Icon(
+                  visibleOnMap
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_outlined,
+                  color: visibleOnMap ? cs.tertiary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Visível no mapa',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        visibleOnMap
+                            ? 'Outros usuários veem sua localização aproximada.'
+                            : 'Sua localização não aparece para ninguém.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: visibleOnMap,
+                  onChanged: (v) async {
+                    final lat = availability?.lat;
+                    final lng = availability?.lng;
+                    await ref
+                        .read(socialRepositoryProvider)
+                        .setVisibleOnMap(visible: v, lat: lat, lng: lng);
+                    if (v && lat == null && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Abra o mapa para registrar sua localização.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMarkSheet(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await showModalBottomSheet<_MarkResult>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => const _MarkAvailabilitySheet(),
+    );
+    if (result == null) return;
+    final res = await ref.read(sportsRepositoryProvider).markAvailability(
+          sport: result.sport,
+          lat: result.lat,
+          lng: result.lng,
+          radiusKm: result.radiusKm,
+        );
+    res.fold(
+      (f) => messenger.showSnackBar(
+        SnackBar(content: Text(f.message)),
+      ),
+      (_) => messenger.showSnackBar(
+        const SnackBar(content: Text('Disponibilidade ativada por 24h.')),
+      ),
+    );
+  }
+}
+
+class _MarkResult {
+  final String sport;
+  final double lat;
+  final double lng;
+  final double radiusKm;
+  const _MarkResult(this.sport, this.lat, this.lng, this.radiusKm);
+}
+
+class _MarkAvailabilitySheet extends ConsumerStatefulWidget {
+  const _MarkAvailabilitySheet();
+
+  @override
+  ConsumerState<_MarkAvailabilitySheet> createState() =>
+      _MarkAvailabilitySheetState();
+}
+
+class _MarkAvailabilitySheetState
+    extends ConsumerState<_MarkAvailabilitySheet> {
+  String _sport = kSportsList.first;
+  double _radius = 5;
+  // Default to São Paulo center; user must open map for real location.
+  static const double _defaultLat = -23.5505;
+  static const double _defaultLng = -46.6333;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    final lat = me?.lastLat ?? _defaultLat;
+    final lng = me?.lastLng ?? _defaultLng;
+    final hasRealLocation = me?.lastLat != null;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Quero jogar hoje',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(
+            'Sua disponibilidade ficará visível por 24h dentro do raio escolhido.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          if (!hasRealLocation) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.tertiaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: cs.onTertiaryContainer, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Sem GPS registrado. Vamos usar São Paulo. '
+                      'Abra o mapa para fixar sua localização real.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onTertiaryContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _sport,
+            decoration: const InputDecoration(
+              labelText: 'Esporte',
+              prefixIcon: Icon(Icons.sports_rounded),
+            ),
+            items: kSportsList
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => setState(() => _sport = v!),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.radar_rounded),
+              const SizedBox(width: 8),
+              Text('Raio: ${_radius.toStringAsFixed(0)} km',
+                  style: theme.textTheme.bodyLarge),
+            ],
+          ),
+          Slider(
+            value: _radius,
+            min: 1,
+            max: 50,
+            divisions: 49,
+            label: '${_radius.toStringAsFixed(0)} km',
+            onChanged: (v) => setState(() => _radius = v),
+          ),
+          Wrap(
+            spacing: 8,
+            children: const [5.0, 7.0, 10.0, 15.0, 25.0]
+                .map((r) => ChoiceChip(
+                      label: Text('${r.toStringAsFixed(0)} km'),
+                      selected: _radius == r,
+                      onSelected: (_) => setState(() => _radius = r),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context)
+                  .pop(_MarkResult(_sport, lat, lng, _radius));
+            },
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Map card ───────────────────────────────────────────────────────────────
+
 class _MapCard extends StatelessWidget {
   final int venueCount;
   final int playerCount;
@@ -176,11 +502,9 @@ class _MapCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              // Background map grid pattern
               Positioned.fill(
                 child: CustomPaint(painter: _GridPainter(cs.primary)),
               ),
-              // Content
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(

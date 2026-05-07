@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/player_availability_model.dart';
@@ -11,6 +13,23 @@ final venuesStreamProvider = StreamProvider<List<SportsVenueModel>>((ref) {
 final availabilityStreamProvider =
     StreamProvider<List<PlayerAvailabilityModel>>((ref) {
   return ref.watch(sportsRepositoryProvider).availabilityStream();
+});
+
+/// My active "quero jogar" availability (null when expired or not set).
+final myAvailabilityProvider =
+    StreamProvider<PlayerAvailabilityModel?>((ref) {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return Stream.value(null);
+  return FirebaseFirestore.instance
+      .collection('player_availability')
+      .where('userId', isEqualTo: uid)
+      .limit(1)
+      .snapshots()
+      .map((s) {
+    if (s.docs.isEmpty) return null;
+    final m = PlayerAvailabilityModel.fromFirestore(s.docs.first);
+    return m.isActive ? m : null;
+  });
 });
 
 /// Filtro de esporte selecionado no mapa (null = todos).

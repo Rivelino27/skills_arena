@@ -8,7 +8,9 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/chat_repository.dart';
+import '../../../data/repositories/social_repository.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/user_provider.dart';
 import '../chat/conversation_screen.dart';
 
 final _userByIdProvider = StreamProvider.family<UserModel?, String>((ref, uid) {
@@ -62,6 +64,10 @@ class _ProfileBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final postsAsync = ref.watch(userPostsStreamProvider(user.id));
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    final iBlocked = me?.hasBlocked(user.id) ?? false;
+    final theyBlockedMe = user.hasBlocked(myUid);
+    final isBlocked = iBlocked || theyBlockedMe;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final name = user.name ?? 'Usuário';
@@ -73,6 +79,45 @@ class _ProfileBody extends ConsumerWidget {
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
+            actions: [
+              if (!isMe)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onSelected: (v) async {
+                    if (v == 'block') {
+                      await _confirmBlock(context, ref);
+                    } else if (v == 'unblock') {
+                      await ref
+                          .read(socialRepositoryProvider)
+                          .unblockUser(user.id);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (iBlocked)
+                      const PopupMenuItem(
+                        value: 'unblock',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.lock_open_rounded),
+                          title: Text('Desbloquear'),
+                        ),
+                      )
+                    else
+                      const PopupMenuItem(
+                        value: 'block',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading:
+                              Icon(Icons.block_rounded, color: Colors.red),
+                          title: Text('Bloquear',
+                              style: TextStyle(color: Colors.red)),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: Text(name,
                   style: const TextStyle(
@@ -121,12 +166,34 @@ class _ProfileBody extends ConsumerWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (isBlocked)
+              Container(
+                width: double.infinity,
+                color: cs.errorContainer,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.block_rounded, color: cs.onErrorContainer),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        iBlocked
+                            ? 'Você bloqueou este usuário.'
+                            : 'Este usuário te bloqueou.',
+                        style: TextStyle(color: cs.onErrorContainer),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (!isMe)
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: FilledButton.icon(
-                  onPressed: () => _openChat(context, ref),
+                  onPressed:
+                      isBlocked ? null : () => _openChat(context, ref),
                   icon: const Icon(Icons.send_rounded),
                   label: const Text('Enviar mensagem'),
                 ),
@@ -170,17 +237,52 @@ class _ProfileBody extends ConsumerWidget {
   }
 
   Future<void> _openChat(BuildContext context, WidgetRef ref) async {
-    final conv =
-        await ref.read(chatRepositoryProvider).getOrCreateConversation(
-              otherUid: user.id,
-              otherName: user.name ?? 'Usuário',
-              otherPhoto: user.photoUrl,
-            );
-    if (!context.mounted) return;
-    AppNavigator.pushWithNavBar(
-      context,
-      ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: user.id,
+                otherName: user.name ?? 'Usuário',
+                otherPhoto: user.photoUrl,
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro: $e')),
+      );
+    }
+  }
+
+  Future<void> _confirmBlock(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bloquear usuário?'),
+        content: Text(
+          '${user.name ?? 'Este usuário'} não poderá te enviar mensagens '
+          'e vocês não aparecerão um para o outro nas listas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Bloquear',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true) return;
+    await ref.read(socialRepositoryProvider).blockUser(user.id);
   }
 }
 

@@ -6,9 +6,11 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
-import '../chat/new_conversation_screen.dart';
+import '../../providers/user_provider.dart';
+import '../chat/conversation_screen.dart';
 
 /// Tela de busca de jogadores — com bottom nav bar visível (pushWithNavBar).
 class FindPlayersScreen extends ConsumerStatefulWidget {
@@ -29,12 +31,15 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
     final allPlayers =
         ref.watch(availabilityStreamProvider).valueOrNull ?? [];
     final radius = ref.watch(mapRadiusProvider);
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    final blocked = me?.blockedUsers ?? const <String>[];
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
     final players = allPlayers.where((p) {
       if (p.userId == currentUid) return false;
+      if (blocked.contains(p.userId)) return false;
       if (_sportFilter != null && p.sport != _sportFilter) return false;
       if (widget.userLat != null && widget.userLng != null) {
         return GeoUtils.distanceKm(
@@ -124,8 +129,7 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
                       player: players[i],
                       userLat: widget.userLat,
                       userLng: widget.userLng,
-                      onChat: () => AppNavigator.pushWithNavBar(
-                          context, const NewConversationScreen()),
+                      onChat: () => _openChatWith(players[i]),
                     ),
                   ),
           ),
@@ -137,6 +141,26 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
         label: const Text('Quero jogar'),
       ),
     );
+  }
+
+  Future<void> _openChatWith(PlayerAvailabilityModel player) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: player.userId,
+                otherName: player.userName,
+                otherPhoto: player.userPhotoUrl,
+              );
+      if (!mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
   }
 
   void _showRadiusSheet(BuildContext context, WidgetRef ref, double current) {
