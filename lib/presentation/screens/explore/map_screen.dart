@@ -162,26 +162,41 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Future<void> _initLocation() async {
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      if (!serviceEnabled) {
+        if (mounted) setState(() => _loadingLocation = false);
+        return;
+      }
+
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.whileInUse ||
-          permission == LocationPermission.always) {
-        final pos = await Geolocator.getCurrentPosition();
-        if (!mounted) return;
-        setState(() {
-          _userPosition = pos;
-          _loadingLocation = false;
-        });
-        _mapController.move(
-          LatLng(pos.latitude, pos.longitude),
-          14.0,
-        );
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always) {
+        if (mounted) setState(() => _loadingLocation = false);
         return;
       }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingLocation = false);
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 8),
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
+        throw TimeoutException('GPS demorou para responder');
+      });
+      if (!mounted) return;
+      setState(() {
+        _userPosition = pos;
+        _loadingLocation = false;
+      });
+      _mapController.move(
+        LatLng(pos.latitude, pos.longitude),
+        14.0,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
   }
 
   @override
