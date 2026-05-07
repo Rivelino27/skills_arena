@@ -13,7 +13,7 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
+class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   final List<int> _tabHistory = [0];
 
@@ -22,24 +22,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   double _dragStartX = 0.0;
   double _dragDeltaX = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  Future<bool> didPopRoute() async {
-    if (!mounted) return false;
-    return _onBack();
-  }
 
   void _removeConsecutiveDuplicates() {
     for (int i = _tabHistory.length - 1; i > 0; i--) {
@@ -68,17 +50,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _onPopInvokedWithResult(bool didPop, Object? result) {
     if (didPop) return;
-    _onBack();
-  }
 
-  bool _onBack() {
-    final rootNav = Navigator.maybeOf(context, rootNavigator: true);
-    if (rootNav != null && rootNav.canPop()) return false;
-
-    final tabNav = _navKeys[_currentIndex].currentState;
-    if (tabNav?.canPop() ?? false) {
-      tabNav!.pop();
-      return true;
+    final currentNavigator = _navKeys[_currentIndex].currentState;
+    if (currentNavigator?.canPop() ?? false) {
+      currentNavigator?.pop();
+      return;
     }
 
     if (_tabHistory.length > 1) {
@@ -87,11 +63,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _removeConsecutiveDuplicates();
         _currentIndex = _tabHistory.last;
       });
-      return true;
+      return;
+    }
+
+    if (_currentIndex != 0) {
+      setState(() {
+        _tabHistory
+          ..clear()
+          ..add(0);
+        _currentIndex = 0;
+      });
+      return;
     }
 
     SystemNavigator.pop();
-    return true;
   }
 
   @override
