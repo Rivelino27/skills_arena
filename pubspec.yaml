@@ -46,23 +46,25 @@ dependencies:
   # URLs e compartilhamento
   url_launcher: ^6.2.0
   share_plus: ^9.0.0
+  flutter_launcher_icons: ^0.14.4
 
-# para colocar o icone do app, imagem quadrada, usar o comando: flutter pub run flutter_launcher_icons
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/images/logo_app.png"
-  adaptive_icon_background: "#000000"   # ou cor desejada
-  adaptive_icon_foreground: "assets/images/logo_app.png" # para o icone preenchido, ou pode ser uma imagem transparente
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
 
+# para colocar o icone do app, imagem quadrada, usar o comando: dart run flutter_launcher_icons:generate e para trocar icone usar o dart run flutter_launcher_icons:generate -o -- depois para aplicar flutter pub run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#000000"   # ou cor desejada
+  adaptive_icon_foreground: "assets/icon/icon.png" # para o icone preenchido, ou pode ser uma imagem transparente
+
 flutter:
   uses-material-design: true
 
   assets:
     - assets/images/
-    - assets/
+    - assets/icon/
