@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/repositories/auth_repository.dart';
+import '../../providers/tab_nav_provider.dart';
 import '../../widgets/auth/google_sign_in_button.dart';
 import '../shell/main_shell.dart';
 import 'forgot_password_screen.dart';
@@ -57,6 +58,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _goToApp() {
+    ref.read(tabNavProvider.notifier).reset();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const MainShell()),
       (route) => false,

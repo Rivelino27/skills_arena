@@ -24,7 +24,7 @@ class ChatScreen extends ConsumerWidget {
         data: (convs) {
           if (convs.isEmpty) {
             return _EmptyState(
-              onNewChat: () => AppNavigator.pushWithoutNavBar(
+              onNewChat: () => AppNavigator.pushWithNavBar(
                   context, const NewConversationScreen()),
             );
           }
@@ -50,7 +50,7 @@ class ChatScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: null,
-        onPressed: () => AppNavigator.pushWithoutNavBar(
+        onPressed: () => AppNavigator.pushWithNavBar(
             context, const NewConversationScreen()),
         tooltip: 'Nova conversa',
         child: const Icon(Icons.edit_rounded),

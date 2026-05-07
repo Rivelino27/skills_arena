@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/repositories/auth_repository.dart';
+import '../../providers/tab_nav_provider.dart';
 import '../shell/main_shell.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -47,10 +48,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       ),
-      (_) => Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (route) => false,
-      ),
+      (_) {
+        ref.read(tabNavProvider.notifier).reset();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainShell()),
+          (route) => false,
+        );
+      },
     );
   }
 

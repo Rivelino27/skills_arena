@@ -1,80 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/tab_nav_provider.dart';
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
-  final List<int> _tabHistory = [0];
-
+class _MainShellState extends ConsumerState<MainShell> {
   final List<GlobalKey<NavigatorState>> _navKeys =
       List.generate(4, (_) => GlobalKey<NavigatorState>());
 
   double _dragStartX = 0.0;
   double _dragDeltaX = 0.0;
 
-  void _removeConsecutiveDuplicates() {
-    for (int i = _tabHistory.length - 1; i > 0; i--) {
-      if (_tabHistory[i] == _tabHistory[i - 1]) {
-        _tabHistory.removeAt(i);
-      }
-    }
-  }
-
   void _onTabTapped(int index) {
-    if (index == _currentIndex) {
+    final current = ref.read(tabNavProvider).currentIndex;
+    if (index == current) {
       _navKeys[index].currentState?.popUntil((route) => route.isFirst);
       return;
     }
-    setState(() {
-      if (_tabHistory.last != index) {
-        if (_tabHistory.contains(index) && index != 0) {
-          _tabHistory.remove(index);
-        }
-        _tabHistory.add(index);
-        _removeConsecutiveDuplicates();
-      }
-      _currentIndex = index;
-    });
+    ref.read(tabNavProvider.notifier).selectTab(index);
   }
 
   void _onPopInvokedWithResult(bool didPop, Object? result) {
     if (didPop) return;
 
-    final currentNavigator = _navKeys[_currentIndex].currentState;
+    final current = ref.read(tabNavProvider).currentIndex;
+    final currentNavigator = _navKeys[current].currentState;
     if (currentNavigator?.canPop() ?? false) {
       currentNavigator?.pop();
       return;
     }
 
-    if (_tabHistory.length > 1) {
-      setState(() {
-        _tabHistory.removeLast();
-        _removeConsecutiveDuplicates();
-        _currentIndex = _tabHistory.last;
-      });
-      return;
-    }
-
-    if (_currentIndex != 0) {
-      setState(() {
-        _tabHistory
-          ..clear()
-          ..add(0);
-        _currentIndex = 0;
-      });
-      return;
-    }
+    final stepped = ref.read(tabNavProvider.notifier).stepBack();
+    if (stepped) return;
 
     SystemNavigator.pop();
   }
@@ -82,13 +50,14 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final currentIndex = ref.watch(tabNavProvider).currentIndex;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: _onPopInvokedWithResult,
       child: Scaffold(
         body: IndexedStack(
-          index: _currentIndex,
+          index: currentIndex,
           children: List.generate(4, _buildTabNavigator),
         ),
         bottomNavigationBar: GestureDetector(
@@ -103,8 +72,8 @@ class _MainShellState extends State<MainShell> {
           onHorizontalDragEnd: (_) {
             if (_dragDeltaX.abs() > 50) {
               final newIndex = _dragDeltaX > 0
-                  ? (_currentIndex > 0 ? _currentIndex - 1 : 3)
-                  : (_currentIndex < 3 ? _currentIndex + 1 : 0);
+                  ? (currentIndex > 0 ? currentIndex - 1 : 3)
+                  : (currentIndex < 3 ? currentIndex + 1 : 0);
               _onTabTapped(newIndex);
             }
           },
@@ -115,7 +84,7 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
             child: NavigationBar(
-              selectedIndex: _currentIndex,
+              selectedIndex: currentIndex,
               onDestinationSelected: _onTabTapped,
               backgroundColor: cs.surface,
               elevation: 0,
