@@ -14,7 +14,7 @@ Este arquivo documenta tudo que precisa ser feito **além do código** para o ap
 # Instale o CLI (somente uma vez)
 dart pub global activate flutterfire_cli
 
-# Na raiz do projeto
+# Na raiz do projeto C:\Users\TD48\AppData\Local\Pub\Cache\bin\flutterfire configure
 flutterfire configure
 ```
 

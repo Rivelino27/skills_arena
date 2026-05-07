@@ -47,6 +47,14 @@ dependencies:
   url_launcher: ^6.2.0
   share_plus: ^9.0.0
 
+# para colocar o icone do app, imagem quadrada, usar o comando: flutter pub run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_app.png"
+  adaptive_icon_background: "#000000"   # ou cor desejada
+  adaptive_icon_foreground: "assets/images/logo_app.png" # para o icone preenchido, ou pode ser uma imagem transparente
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -57,3 +65,4 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/
