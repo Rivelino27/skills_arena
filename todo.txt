@@ -1,3 +1,26 @@
+Falta arrumar / incluir:
+
+Os users devem ter a opção na aba explorar de colocar seu status atual de fora pratica, disponivel para jogar hoje, 
+nas proximas 17h, raio de busca personalizado 5 km 7km 10 km etc, passando 24h esse status quero jogar é desativado, mas mesmo
+ele sendo desativado o user pode ativar ou desativar sua visualização na região, assim tera dois tipos de busca jogar hoje
+das pessoas que ativaram que querem jogar e os jogadores encontrados na região.
+
+No mapa ir aparecendo um botão flutuante a direita com o numero de jogadores encontrados no raio de busca e outro botão 
+com o numero de quadras encontradas, e ao clicar neles aparecer a listagem de jogadores encontrados na area e poder falar com eles e
+selecionar os users para criar um grupo e falar com eles.
+
+O chat deve ter verificação de visualizado de msgs igual a setinha do whatsapp e reagir com emogis na MSG . 👍🤣🆗✅❌✔✌🤝🏆👎
+
+Users devem bloquear / desbloquear usuarios.
+
+não esta funcionando comentarios nas postagens:
+W/Firestore(11362): (24.11.0) [Firestore]: Write failed at posts/XOU4xHhvw9cjHFh7h7qW: Status{code=PERMISSION_DENIED, description=Missing or insufficient permissions., cause=null}
+
+
+
+
+<<_________________ past :
+
 falta poder comentar em postagens, mandar mensagens para a pessoas da postagem clicando nela e vendo o perfil dela.
 A pessoa pode postar links do tik tok também nas postagens.
 no modo de inserir local de esporte apareer um pin que a pessoa vai movendo ele até o local no mapa e ao tocar novamante nele ou no botão + que deve aparecer ela inlui olocal do esporte
