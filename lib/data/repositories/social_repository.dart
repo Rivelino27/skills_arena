@@ -34,6 +34,23 @@ class SocialRepository {
     });
   }
 
+  /// Persists the user's fixed home/work address (display + coordinates).
+  /// Pass nulls to clear it.
+  Future<void> setFixedAddress({
+    String? address,
+    double? lat,
+    double? lng,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+    await _userDoc(me.uid).update({
+      'address': address,
+      'addressLat': lat,
+      'addressLng': lng,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
   Future<void> setVisibleOnMap({
     required bool visible,
     double? lat,

@@ -19,11 +19,21 @@ service cloud.firestore {
     }
 
     // ── Sports venues (quadras) ───────────────────────────────────────────
-    // Field: `addedBy` (not `createdBy`)
+    // Field: `addedBy` (not `createdBy`).
+    // Any signed-in user may patch the live occupancy fields (occupancy,
+    // occupancyUpdatedAt, occupancyUpdatedBy). All other fields are author-only.
     match /sports_venues/{venueId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.addedBy == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.addedBy == request.auth.uid
+        || (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['occupancy', 'occupancyUpdatedAt', 'occupancyUpdatedBy'])
+          && request.resource.data.occupancyUpdatedBy == request.auth.uid
+        )
+      );
+      allow delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;
     }
 
     // ── Player availability ───────────────────────────────────────────────

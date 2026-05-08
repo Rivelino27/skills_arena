@@ -140,8 +140,19 @@ class ChatRepository {
     batch.update(_chats.doc(chatId), {
       'lastMessage': text.trim(),
       'lastMessageAt': Timestamp.fromDate(now),
+      'lastSenderId': user.uid,
+      'lastReadAt.${user.uid}': Timestamp.fromDate(now),
     });
     await batch.commit();
+  }
+
+  /// Marks the conversation as read for the current user (now).
+  Future<void> markAsRead(String chatId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await _chats.doc(chatId).update({
+      'lastReadAt.$uid': Timestamp.now(),
+    });
   }
 
   Stream<List<UserModel>> usersStream(String excludeUid) => _db

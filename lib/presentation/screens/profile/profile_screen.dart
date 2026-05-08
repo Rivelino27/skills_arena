@@ -7,6 +7,7 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
+import 'edit_address_screen.dart';
 import 'nav_demo_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -142,6 +143,25 @@ class ProfileScreen extends ConsumerWidget {
                       leading: const Icon(Icons.email_outlined),
                       title: const Text('E-mail'),
                       subtitle: Text(email),
+                    ),
+                    Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: cs.outlineVariant),
+                    ListTile(
+                      leading: const Icon(Icons.home_outlined),
+                      title: const Text('Meu endereço'),
+                      subtitle: Text(
+                        user?.address ??
+                            'Defina um endereço fixo para o mapa',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: cs.onSurfaceVariant),
+                      onTap: () => AppNavigator.pushWithNavBar(
+                          context, const EditAddressScreen()),
                     ),
                     Divider(
                         height: 1,

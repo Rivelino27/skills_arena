@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/chat_provider.dart';
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
   final List<int> _tabHistory = [0];
 
@@ -68,6 +70,7 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final unreadChats = ref.watch(unreadConversationsCountProvider);
 
     return PopScope(
       canPop: false,
@@ -109,23 +112,31 @@ class _MainShellState extends State<MainShell> {
               backgroundColor: cs.surface,
               elevation: 0,
               surfaceTintColor: Colors.transparent,
-              destinations: const [
-                NavigationDestination(
+              destinations: [
+                const NavigationDestination(
                   icon: Icon(Icons.home_outlined),
                   selectedIcon: Icon(Icons.home_rounded),
                   label: 'Home',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   icon: Icon(Icons.explore_outlined),
                   selectedIcon: Icon(Icons.explore_rounded),
                   label: 'Explorar',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.chat_bubble_outline_rounded),
-                  selectedIcon: Icon(Icons.chat_bubble_rounded),
+                  icon: Badge(
+                    isLabelVisible: unreadChats > 0,
+                    label: Text('$unreadChats'),
+                    child: const Icon(Icons.chat_bubble_outline_rounded),
+                  ),
+                  selectedIcon: Badge(
+                    isLabelVisible: unreadChats > 0,
+                    label: Text('$unreadChats'),
+                    child: const Icon(Icons.chat_bubble_rounded),
+                  ),
                   label: 'Chat',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   icon: Icon(Icons.person_outline_rounded),
                   selectedIcon: Icon(Icons.person_rounded),
                   label: 'Perfil',

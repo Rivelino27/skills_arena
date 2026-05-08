@@ -12,6 +12,9 @@ class UserModel {
   final bool visibleOnMap;
   final double? lastLat;
   final double? lastLng;
+  final String? address;
+  final double? addressLat;
+  final double? addressLng;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -27,9 +30,16 @@ class UserModel {
     this.visibleOnMap = false,
     this.lastLat,
     this.lastLng,
+    this.address,
+    this.addressLat,
+    this.addressLng,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Preferred public location: fixed address if set, else last GPS reading.
+  double? get effectiveLat => addressLat ?? lastLat;
+  double? get effectiveLng => addressLng ?? lastLng;
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -45,6 +55,9 @@ class UserModel {
       visibleOnMap: data['visibleOnMap'] as bool? ?? false,
       lastLat: (data['lastLat'] as num?)?.toDouble(),
       lastLng: (data['lastLng'] as num?)?.toDouble(),
+      address: data['address'] as String?,
+      addressLat: (data['addressLat'] as num?)?.toDouble(),
+      addressLng: (data['addressLng'] as num?)?.toDouble(),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
     );
@@ -61,6 +74,9 @@ class UserModel {
         'visibleOnMap': visibleOnMap,
         'lastLat': lastLat,
         'lastLng': lastLng,
+        'address': address,
+        'addressLat': addressLat,
+        'addressLng': addressLng,
         'createdAt': Timestamp.fromDate(createdAt),
         'updatedAt': Timestamp.fromDate(updatedAt),
       };
@@ -78,6 +94,9 @@ class UserModel {
     bool? visibleOnMap,
     double? lastLat,
     double? lastLng,
+    String? address,
+    double? addressLat,
+    double? addressLng,
   }) =>
       UserModel(
         id: id,
@@ -91,6 +110,9 @@ class UserModel {
         visibleOnMap: visibleOnMap ?? this.visibleOnMap,
         lastLat: lastLat ?? this.lastLat,
         lastLng: lastLng ?? this.lastLng,
+        address: address ?? this.address,
+        addressLat: addressLat ?? this.addressLat,
+        addressLng: addressLng ?? this.addressLng,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );

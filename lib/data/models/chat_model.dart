@@ -7,6 +7,8 @@ class ConversationModel {
   final Map<String, String?> participantPhotos;
   final String? lastMessage;
   final DateTime? lastMessageAt;
+  final String? lastSenderId;
+  final Map<String, DateTime?> lastReadAt;
   final bool isGroup;
   final String? groupName;
 
@@ -17,9 +19,21 @@ class ConversationModel {
     required this.participantPhotos,
     this.lastMessage,
     this.lastMessageAt,
+    this.lastSenderId,
+    this.lastReadAt = const {},
     this.isGroup = false,
     this.groupName,
   });
+
+  /// True if there is a newer message than the user's last-read timestamp
+  /// AND the latest message was not sent by the user themself.
+  bool hasUnreadFor(String myUid) {
+    if (lastMessageAt == null) return false;
+    if (lastSenderId == myUid) return false;
+    final read = lastReadAt[myUid];
+    if (read == null) return true;
+    return lastMessageAt!.isAfter(read);
+  }
 
   String otherUid(String myUid) =>
       participants.firstWhere((id) => id != myUid, orElse: () => myUid);
@@ -56,6 +70,14 @@ class ConversationModel {
       lastMessageAt: d['lastMessageAt'] != null
           ? (d['lastMessageAt'] as Timestamp).toDate()
           : null,
+      lastSenderId: d['lastSenderId'] as String?,
+      lastReadAt: () {
+        final raw = d['lastReadAt'] as Map<String, dynamic>? ?? {};
+        return raw.map<String, DateTime?>(
+          (k, v) =>
+              MapEntry(k, v is Timestamp ? v.toDate() : null),
+        );
+      }(),
       isGroup: d['isGroup'] as bool? ?? false,
       groupName: d['groupName'] as String?,
     );
@@ -68,6 +90,11 @@ class ConversationModel {
         'lastMessage': lastMessage,
         'lastMessageAt':
             lastMessageAt != null ? Timestamp.fromDate(lastMessageAt!) : null,
+        'lastSenderId': lastSenderId,
+        'lastReadAt': lastReadAt.map(
+          (k, v) =>
+              MapEntry(k, v != null ? Timestamp.fromDate(v) : null),
+        ),
         'isGroup': isGroup,
         'groupName': groupName,
       };

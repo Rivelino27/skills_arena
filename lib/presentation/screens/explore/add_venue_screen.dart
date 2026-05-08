@@ -22,6 +22,7 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   String _selectedSport = kSportsList.first;
+  bool _isPublic = true;
   bool _loading = false;
 
   @override
@@ -52,6 +53,7 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
       address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
       addedBy: user.uid,
       addedByName: user.displayName ?? 'Usuário',
+      isPublic: _isPublic,
       createdAt: DateTime.now(),
     );
 
@@ -176,6 +178,30 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
                     prefixIcon: Icon(Icons.home_outlined),
                     hintText: 'Rua, número, bairro…',
                   ),
+                ),
+                const SizedBox(height: 20),
+
+                // Público / privado
+                Text('Tipo de acesso',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: true,
+                      icon: Icon(Icons.public_rounded),
+                      label: Text('Público'),
+                    ),
+                    ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.lock_outline_rounded),
+                      label: Text('Privado'),
+                    ),
+                  ],
+                  selected: {_isPublic},
+                  onSelectionChanged: (s) =>
+                      setState(() => _isPublic = s.first),
                 ),
                 const SizedBox(height: 32),
 

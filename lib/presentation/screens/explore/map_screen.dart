@@ -64,8 +64,17 @@ IconData _sportIcon(String sport) {
 
 class MapScreen extends ConsumerStatefulWidget {
   final String? initialSportFilter;
+  final double? initialLat;
+  final double? initialLng;
+  final double? initialZoom;
 
-  const MapScreen({super.key, this.initialSportFilter});
+  const MapScreen({
+    super.key,
+    this.initialSportFilter,
+    this.initialLat,
+    this.initialLng,
+    this.initialZoom,
+  });
 
   @override
   ConsumerState<MapScreen> createState() => _MapScreenState();
@@ -82,6 +91,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<_GeoResult> _suggestions = [];
   Timer? _debounce;
   LatLng _pinPosition = const LatLng(-23.5505, -46.6333);
+  String? _pinAddress;
+  bool _reverseGeocoding = false;
+  Timer? _revGeoDebounce;
 
   static const _defaultCenter = LatLng(-23.5505, -46.6333); // São Paulo
 
@@ -94,12 +106,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             widget.initialSportFilter;
       });
     }
+    // If caller passed an explicit center, jump there once the map mounts
+    // and skip auto-centering on user GPS.
+    if (widget.initialLat != null && widget.initialLng != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mapController.move(
+          LatLng(widget.initialLat!, widget.initialLng!),
+          widget.initialZoom ?? 16.0,
+        );
+      });
+    }
     _initLocation();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _revGeoDebounce?.cancel();
     _mapController.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -152,6 +175,66 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
+  void _reverseGeocode(LatLng pos) {
+    _revGeoDebounce?.cancel();
+    _revGeoDebounce = Timer(const Duration(milliseconds: 600), () async {
+      if (!mounted) return;
+      setState(() => _reverseGeocoding = true);
+      try {
+        final client = HttpClient();
+        final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+          'lat': pos.latitude.toString(),
+          'lon': pos.longitude.toString(),
+          'format': 'json',
+        });
+        final request = await client.getUrl(uri);
+        request.headers
+          ..set(HttpHeaders.userAgentHeader, 'SkillsArena/1.0')
+          ..set(HttpHeaders.acceptHeader, 'application/json');
+        final response = await request.close();
+        final body = await response.transform(const Utf8Decoder()).join();
+        client.close();
+        if (!mounted) return;
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final addr = json['address'] as Map<String, dynamic>?;
+        String display = '';
+        if (addr != null) {
+          final road = addr['road'] as String? ??
+              addr['pedestrian'] as String? ??
+              addr['street'] as String? ??
+              '';
+          final number = addr['house_number'] as String? ?? '';
+          final postcode = addr['postcode'] as String? ?? '';
+          final suburb = addr['suburb'] as String? ??
+              addr['neighbourhood'] as String? ??
+              addr['city_district'] as String? ??
+              '';
+          final city = addr['city'] as String? ??
+              addr['town'] as String? ??
+              addr['municipality'] as String? ??
+              '';
+          final parts = <String>[];
+          if (road.isNotEmpty) {
+            parts.add(number.isNotEmpty ? '$road, $number' : road);
+          }
+          if (suburb.isNotEmpty) parts.add(suburb);
+          if (city.isNotEmpty) parts.add(city);
+          if (postcode.isNotEmpty) parts.add('CEP $postcode');
+          display = parts.join(' • ');
+        }
+        if (display.isEmpty) {
+          display = json['display_name'] as String? ?? '';
+        }
+        setState(() {
+          _pinAddress = display;
+          _reverseGeocoding = false;
+        });
+      } catch (_) {
+        if (mounted) setState(() => _reverseGeocoding = false);
+      }
+    });
+  }
+
   void _selectSuggestion(_GeoResult r) {
     _debounce?.cancel();
     _mapController.move(LatLng(r.lat, r.lon), 15.0);
@@ -193,10 +276,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         _userPosition = pos;
         _loadingLocation = false;
       });
-      _mapController.move(
-        LatLng(pos.latitude, pos.longitude),
-        14.0,
-      );
+      // Don't override an explicit initial center.
+      if (widget.initialLat == null || widget.initialLng == null) {
+        _mapController.move(
+          LatLng(pos.latitude, pos.longitude),
+          14.0,
+        );
+      }
       // Silently push the resolved location to the user doc so visibleOnMap /
       // markAvailability can use the latest known coords without re-prompting.
       final me = ref.read(currentUserProvider).valueOrNull;
@@ -269,13 +355,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _userPosition != null
-                  ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
-                  : _defaultCenter,
-              initialZoom: 13.0,
+              initialCenter: widget.initialLat != null &&
+                      widget.initialLng != null
+                  ? LatLng(widget.initialLat!, widget.initialLng!)
+                  : _userPosition != null
+                      ? LatLng(
+                          _userPosition!.latitude, _userPosition!.longitude)
+                      : _defaultCenter,
+              initialZoom: widget.initialZoom ?? 13.0,
               onMapEvent: (event) {
                 if (_pinMode && event is MapEventMove) {
                   setState(() => _pinPosition = event.camera.center);
+                  _reverseGeocode(event.camera.center);
                 }
               },
             ),
@@ -307,14 +398,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           width: 44,
                           height: 44,
                           child: GestureDetector(
-                            onTap: () => AppNavigator.pushWithoutNavBar(
-                              context,
-                              VenueDetailScreen(
-                                venue: v,
-                                userLat: _userPosition?.latitude,
-                                userLng: _userPosition?.longitude,
-                              ),
-                            ),
+                            onTap: () => _showVenueSheet(context, v),
                             child: _VenueMarker(sport: v.sport),
                           ),
                         ))
@@ -362,7 +446,125 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
             ],
           ),
-          // ── Address search overlay ────────────────────────────────────
+          if (_loadingLocation)
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: cs.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Obtendo localização…'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── Counter chips (top-right) ──────────────────────────────────
+          if (!_pinMode)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _CountChip(
+                    icon: Icons.people_alt_rounded,
+                    color: cs.tertiary,
+                    label: '${filteredPlayers.length} jogador'
+                        '${filteredPlayers.length == 1 ? '' : 'es'}',
+                    onTap: () =>
+                        _showPlayersListSheet(context, filteredPlayers),
+                  ),
+                  const SizedBox(height: 8),
+                  _CountChip(
+                    icon: Icons.place_rounded,
+                    color: cs.primary,
+                    label: '${filteredVenues.length} quadra'
+                        '${filteredVenues.length == 1 ? '' : 's'}',
+                    onTap: () =>
+                        _showVenuesListSheet(context, filteredVenues),
+                  ),
+                ],
+              ),
+            ),
+          // ── Pin placement overlay ──────────────────────────────────────
+          if (_pinMode) ...[
+            const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.location_on_rounded,
+                      size: 48, color: Colors.red),
+                  SizedBox(height: 44),
+                ],
+              ),
+            ),
+            const Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Card(
+                  color: Colors.black87,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Text(
+                      'Mova o mapa para posicionar o pin',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          // ── Pin address card (bottom, above FABs) ──────────────────────
+          if (_pinMode)
+            Positioned(
+              bottom: 104,
+              left: 16,
+              right: 16,
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _reverseGeocoding
+                            ? const LinearProgressIndicator(minHeight: 2)
+                            : Text(
+                                _pinAddress?.isNotEmpty == true
+                                    ? _pinAddress!
+                                    : 'Obtendo endereço…',
+                                style: const TextStyle(fontSize: 13),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── Address search overlay (always on top) ─────────────────────
           if (_showSearch)
             Positioned(
               top: 8,
@@ -452,89 +654,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ],
               ),
             ),
-          if (_loadingLocation)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: cs.primary),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text('Obtendo localização…'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          // ── Counter chips (top-right) ──────────────────────────────────
-          if (!_pinMode)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _CountChip(
-                    icon: Icons.people_alt_rounded,
-                    color: cs.tertiary,
-                    label: '${filteredPlayers.length} jogador'
-                        '${filteredPlayers.length == 1 ? '' : 'es'}',
-                    onTap: () =>
-                        _showPlayersListSheet(context, filteredPlayers),
-                  ),
-                  const SizedBox(height: 8),
-                  _CountChip(
-                    icon: Icons.place_rounded,
-                    color: cs.primary,
-                    label: '${filteredVenues.length} quadra'
-                        '${filteredVenues.length == 1 ? '' : 's'}',
-                    onTap: () =>
-                        _showVenuesListSheet(context, filteredVenues),
-                  ),
-                ],
-              ),
-            ),
-          // ── Pin placement overlay ──────────────────────────────────────
-          if (_pinMode) ...[
-            const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.location_on_rounded,
-                      size: 48, color: Colors.red),
-                  SizedBox(height: 44),
-                ],
-              ),
-            ),
-            const Positioned(
-              top: 16,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Card(
-                  color: Colors.black87,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    child: Text(
-                      'Mova o mapa para posicionar o pin',
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
       floatingActionButton: _pinMode
@@ -546,7 +665,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   tooltip: 'Cancelar',
                   backgroundColor: cs.errorContainer,
                   foregroundColor: cs.onErrorContainer,
-                  onPressed: () => setState(() => _pinMode = false),
+                  onPressed: () {
+                    _revGeoDebounce?.cancel();
+                    setState(() {
+                      _pinMode = false;
+                      _pinAddress = null;
+                    });
+                  },
                   child: const Icon(Icons.close_rounded),
                 ),
                 const SizedBox(height: 8),
@@ -609,12 +734,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         : _mapController.camera.center;
     setState(() {
       _pinPosition = center;
+      _pinAddress = null;
+      _reverseGeocoding = false;
       _pinMode = true;
     });
+    _reverseGeocode(center);
   }
 
   Future<void> _confirmPin() async {
-    setState(() => _pinMode = false);
+    _revGeoDebounce?.cancel();
+    setState(() {
+      _pinMode = false;
+      _pinAddress = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final ok = await AppNavigator.pushWithoutNavBar<bool>(
       context,
@@ -636,6 +768,123 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _RadiusSheet(currentRadius: current),
+    );
+  }
+
+  void _animateTo(LatLng pos, {double zoom = 16.0}) {
+    _mapController.move(pos, zoom);
+  }
+
+  void _showVenueSheet(BuildContext context, SportsVenueModel v) {
+    final dist = _userPosition == null
+        ? null
+        : GeoUtils.distanceKm(_userPosition!.latitude,
+            _userPosition!.longitude, v.lat, v.lng);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor:
+                          _sportColor(v.sport).withValues(alpha: 0.2),
+                      child: Icon(_sportIcon(v.sport),
+                          color: _sportColor(v.sport)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(v.name,
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            '${v.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (v.address != null && v.address!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 16, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(v.address!,
+                            style: theme.textTheme.bodySmall),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _animateTo(LatLng(v.lat, v.lng));
+                        },
+                        icon: const Icon(Icons.center_focus_strong_rounded),
+                        label: const Text('Centralizar'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          AppNavigator.pushWithoutNavBar(
+                            context,
+                            VenueDetailScreen(
+                              venue: v,
+                              userLat: _userPosition?.latitude,
+                              userLng: _userPosition?.longitude,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.info_outline_rounded),
+                        label: const Text('Detalhes'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -689,30 +938,49 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    try {
-                      final conv = await ref
-                          .read(chatRepositoryProvider)
-                          .getOrCreateConversation(
-                            otherUid: player.userId,
-                            otherName: player.userName,
-                            otherPhoto: player.userPhotoUrl,
-                          );
-                      final myUid =
-                          FirebaseAuth.instance.currentUser?.uid ?? '';
-                      if (context.mounted) {
-                        AppNavigator.pushWithNavBar(
-                          context,
-                          ConversationScreen(
-                              chatId: conv.id, conv: conv, myUid: myUid),
-                        );
-                      }
-                    } catch (_) {}
-                  },
-                  icon: const Icon(Icons.chat_bubble_rounded),
-                  label: const Text('Enviar mensagem'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _animateTo(LatLng(player.lat, player.lng));
+                        },
+                        icon: const Icon(Icons.center_focus_strong_rounded),
+                        label: const Text('Centralizar'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          try {
+                            final conv = await ref
+                                .read(chatRepositoryProvider)
+                                .getOrCreateConversation(
+                                  otherUid: player.userId,
+                                  otherName: player.userName,
+                                  otherPhoto: player.userPhotoUrl,
+                                );
+                            final myUid =
+                                FirebaseAuth.instance.currentUser?.uid ?? '';
+                            if (context.mounted) {
+                              AppNavigator.pushWithNavBar(
+                                context,
+                                ConversationScreen(
+                                    chatId: conv.id,
+                                    conv: conv,
+                                    myUid: myUid),
+                              );
+                            }
+                          } catch (_) {}
+                        },
+                        icon: const Icon(Icons.chat_bubble_rounded),
+                        label: const Text('Mensagem'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -729,10 +997,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _PlayersListSheet(
+      builder: (sheetCtx) => _PlayersListSheet(
         players: players,
         userLat: _userPosition?.latitude,
         userLng: _userPosition?.longitude,
+        onCenterOnMap: (p) {
+          Navigator.of(sheetCtx).pop();
+          _animateTo(LatLng(p.lat, p.lng));
+        },
       ),
     );
   }
@@ -750,14 +1022,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         userLng: _userPosition?.longitude,
         onTapVenue: (v) {
           Navigator.of(sheetCtx).pop();
-          AppNavigator.pushWithoutNavBar(
-            context,
-            VenueDetailScreen(
-              venue: v,
-              userLat: _userPosition?.latitude,
-              userLng: _userPosition?.longitude,
-            ),
-          );
+          _animateTo(LatLng(v.lat, v.lng));
+          // Open the venue summary sheet so user can see details / centralize.
+          _showVenueSheet(context, v);
         },
       ),
     );
@@ -986,11 +1253,13 @@ class _PlayersListSheet extends ConsumerStatefulWidget {
   final List<PlayerAvailabilityModel> players;
   final double? userLat;
   final double? userLng;
+  final ValueChanged<PlayerAvailabilityModel>? onCenterOnMap;
 
   const _PlayersListSheet({
     required this.players,
     this.userLat,
     this.userLng,
+    this.onCenterOnMap,
   });
 
   @override
@@ -1192,6 +1461,17 @@ class _PlayersListSheetState extends ConsumerState<_PlayersListSheet> {
                           subtitle: Text(
                             '${p.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}',
                           ),
+                          trailing: _isSelectMode
+                              ? null
+                              : (widget.onCenterOnMap != null
+                                  ? IconButton(
+                                      icon: const Icon(
+                                          Icons.center_focus_strong_rounded),
+                                      tooltip: 'Centralizar no mapa',
+                                      onPressed: () =>
+                                          widget.onCenterOnMap!(p),
+                                    )
+                                  : null),
                           onTap: _isSelectMode
                               ? () => _toggle(p.userId)
                               : () => _openSingleChat(p),

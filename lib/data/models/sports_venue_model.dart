@@ -12,6 +12,39 @@ const List<String> kSportsList = [
   'Outros',
 ];
 
+/// Self-reported crowding level at a venue right now.
+enum VenueOccupancy { unknown, empty, few, full }
+
+extension VenueOccupancyX on VenueOccupancy {
+  String get label {
+    switch (this) {
+      case VenueOccupancy.empty:
+        return 'Vazio';
+      case VenueOccupancy.few:
+        return 'Poucas pessoas';
+      case VenueOccupancy.full:
+        return 'Cheio';
+      case VenueOccupancy.unknown:
+        return 'Sem informação';
+    }
+  }
+
+  String get storageKey => name; // 'unknown' | 'empty' | 'few' | 'full'
+}
+
+VenueOccupancy occupancyFromString(String? raw) {
+  switch (raw) {
+    case 'empty':
+      return VenueOccupancy.empty;
+    case 'few':
+      return VenueOccupancy.few;
+    case 'full':
+      return VenueOccupancy.full;
+    default:
+      return VenueOccupancy.unknown;
+  }
+}
+
 class SportsVenueModel {
   final String id;
   final String name;
@@ -21,6 +54,10 @@ class SportsVenueModel {
   final String? address;
   final String addedBy;
   final String addedByName;
+  final bool isPublic;
+  final VenueOccupancy occupancy;
+  final DateTime? occupancyUpdatedAt;
+  final String? occupancyUpdatedBy;
   final DateTime createdAt;
 
   const SportsVenueModel({
@@ -32,6 +69,10 @@ class SportsVenueModel {
     this.address,
     required this.addedBy,
     required this.addedByName,
+    this.isPublic = true,
+    this.occupancy = VenueOccupancy.unknown,
+    this.occupancyUpdatedAt,
+    this.occupancyUpdatedBy,
     required this.createdAt,
   });
 
@@ -46,6 +87,12 @@ class SportsVenueModel {
       address: data['address'] as String?,
       addedBy: data['addedBy'] as String,
       addedByName: data['addedByName'] as String,
+      isPublic: data['isPublic'] as bool? ?? true,
+      occupancy: occupancyFromString(data['occupancy'] as String?),
+      occupancyUpdatedAt: data['occupancyUpdatedAt'] != null
+          ? (data['occupancyUpdatedAt'] as Timestamp).toDate()
+          : null,
+      occupancyUpdatedBy: data['occupancyUpdatedBy'] as String?,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
   }
@@ -58,6 +105,12 @@ class SportsVenueModel {
         'address': address,
         'addedBy': addedBy,
         'addedByName': addedByName,
+        'isPublic': isPublic,
+        'occupancy': occupancy.storageKey,
+        'occupancyUpdatedAt': occupancyUpdatedAt != null
+            ? Timestamp.fromDate(occupancyUpdatedAt!)
+            : null,
+        'occupancyUpdatedBy': occupancyUpdatedBy,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 }

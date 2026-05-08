@@ -9,6 +9,8 @@ import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
 import '../../providers/user_provider.dart';
 import '../profile/search_users_screen.dart';
+import 'find_players_screen.dart';
+import 'find_venues_screen.dart';
 import 'map_screen.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
@@ -135,7 +137,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     label: 'Quadras',
                     count: venues.length,
                     color: cs.primary,
-                    onTap: () => _openMap(sport: _selectedSport),
+                    onTap: () => AppNavigator.pushWithNavBar(
+                      context,
+                      FindVenuesScreen(
+                        userLat: me?.effectiveLat,
+                        userLng: me?.effectiveLng,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -145,7 +153,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     label: 'Jogadores',
                     count: players.length,
                     color: cs.tertiary,
-                    onTap: () => _openMap(sport: _selectedSport),
+                    onTap: () => AppNavigator.pushWithNavBar(
+                      context,
+                      FindPlayersScreen(
+                        userLat: me?.effectiveLat,
+                        userLng: me?.effectiveLng,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -355,9 +369,10 @@ class _MarkAvailabilitySheetState
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final me = ref.watch(currentUserProvider).valueOrNull;
-    final lat = me?.lastLat ?? _defaultLat;
-    final lng = me?.lastLng ?? _defaultLng;
-    final hasRealLocation = me?.lastLat != null;
+    final lat = me?.effectiveLat ?? _defaultLat;
+    final lng = me?.effectiveLng ?? _defaultLng;
+    final hasRealLocation = me?.effectiveLat != null;
+    final usingFixedAddress = me?.addressLat != null;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -401,10 +416,36 @@ class _MarkAvailabilitySheetState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Sem GPS registrado. Vamos usar São Paulo. '
-                      'Abra o mapa para fixar sua localização real.',
+                      'Sem endereço fixo nem GPS registrado. '
+                      'Vamos usar São Paulo. Defina seu endereço no perfil '
+                      'ou abra o mapa para registrar o GPS.',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: cs.onTertiaryContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (usingFixedAddress) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.home_rounded,
+                      color: cs.onPrimaryContainer, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      me?.address ?? 'Usando seu endereço fixo.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onPrimaryContainer),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],

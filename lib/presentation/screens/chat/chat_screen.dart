@@ -80,6 +80,7 @@ class _ConversationTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final name = conv.displayTitle(myUid);
     final photo = conv.isGroup ? null : conv.otherPhoto(myUid);
+    final unread = conv.hasUnreadFor(myUid);
 
     return ListTile(
       contentPadding:
@@ -108,7 +109,9 @@ class _ConversationTile extends StatelessWidget {
             child: Text(name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    fontWeight:
+                        unread ? FontWeight.w700 : FontWeight.w600)),
           ),
         ],
       ),
@@ -116,12 +119,36 @@ class _ConversationTile extends StatelessWidget {
         conv.lastMessage ?? 'Inicie a conversa',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: cs.onSurfaceVariant),
+        style: TextStyle(
+          color: unread ? cs.onSurface : cs.onSurfaceVariant,
+          fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+        ),
       ),
-      trailing: conv.lastMessageAt != null
-          ? Text(_formatTime(conv.lastMessageAt!),
-              style: Theme.of(context).textTheme.bodySmall)
-          : null,
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (conv.lastMessageAt != null)
+            Text(
+              _formatTime(conv.lastMessageAt!),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: unread ? cs.primary : null,
+                    fontWeight: unread ? FontWeight.w600 : null,
+                  ),
+            ),
+          if (unread) ...[
+            const SizedBox(height: 4),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: cs.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
       onTap: onTap,
     );
   }

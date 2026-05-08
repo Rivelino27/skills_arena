@@ -5,7 +5,9 @@ import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../../data/repositories/post_repository.dart';
+import '../../../data/repositories/sports_repository.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/sports_provider.dart';
 
 class VenueDetailScreen extends ConsumerStatefulWidget {
   final SportsVenueModel venue;
@@ -101,7 +103,7 @@ class _VenueDetailScreenState extends ConsumerState<VenueDetailScreen>
 
 // ─── Aba 1: Info ─────────────────────────────────────────────────────────────
 
-class _InfoTab extends StatelessWidget {
+class _InfoTab extends ConsumerWidget {
   final SportsVenueModel venue;
   final double? userLat;
   final double? userLng;
@@ -109,10 +111,19 @@ class _InfoTab extends StatelessWidget {
   const _InfoTab({required this.venue, this.userLat, this.userLng});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch the live venue so occupancy updates rebuild this tab.
+    final live = ref
+        .watch(venuesStreamProvider)
+        .valueOrNull
+        ?.where((v) => v.id == venue.id)
+        .firstOrNull;
+    final v = live ?? venue;
     final dist = (userLat == null || userLng == null)
         ? null
-        : GeoUtils.distanceKm(userLat!, userLng!, venue.lat, venue.lng);
+        : GeoUtils.distanceKm(userLat!, userLng!, v.lat, v.lng);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -122,36 +133,61 @@ class _InfoTab extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
+              color: cs.primaryContainer,
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.sports_rounded,
-                size: 40,
-                color: Theme.of(context).colorScheme.onPrimaryContainer),
+                size: 40, color: cs.onPrimaryContainer),
           ),
         ),
         const SizedBox(height: 16),
-        Center(
-          child: Chip(
-            label: Text(venue.sport),
-            avatar: const Icon(Icons.sports_rounded, size: 16),
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            labelStyle: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimaryContainer),
-          ),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            Chip(
+              label: Text(v.sport),
+              avatar: const Icon(Icons.sports_rounded, size: 16),
+              backgroundColor: cs.primaryContainer,
+              labelStyle: TextStyle(color: cs.onPrimaryContainer),
+            ),
+            Chip(
+              label: Text(v.isPublic ? 'Público' : 'Privado'),
+              avatar: Icon(
+                v.isPublic
+                    ? Icons.public_rounded
+                    : Icons.lock_outline_rounded,
+                size: 16,
+              ),
+              backgroundColor: v.isPublic
+                  ? cs.tertiaryContainer
+                  : cs.surfaceContainerHighest,
+              labelStyle: TextStyle(
+                color: v.isPublic
+                    ? cs.onTertiaryContainer
+                    : cs.onSurface,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 20),
+
+        // ── Status atual da quadra ─────────────────────────────────────
+        _OccupancySection(venue: v),
+        const SizedBox(height: 8),
+
         _InfoTile(
           icon: Icons.location_on_rounded,
           label: 'Coordenadas',
           value:
-              '${venue.lat.toStringAsFixed(5)}, ${venue.lng.toStringAsFixed(5)}',
+              '${v.lat.toStringAsFixed(5)}, ${v.lng.toStringAsFixed(5)}',
         ),
-        if (venue.address != null)
+        if (v.address != null)
           _InfoTile(
             icon: Icons.home_outlined,
             label: 'Endereço',
-            value: venue.address!,
+            value: v.address!,
           ),
         if (dist != null)
           _InfoTile(
@@ -162,16 +198,187 @@ class _InfoTab extends StatelessWidget {
         _InfoTile(
           icon: Icons.person_outline_rounded,
           label: 'Adicionado por',
-          value: venue.addedByName,
+          value: v.addedByName,
         ),
         _InfoTile(
           icon: Icons.calendar_today_rounded,
           label: 'Data',
-          value: '${venue.createdAt.day.toString().padLeft(2, '0')}/'
-              '${venue.createdAt.month.toString().padLeft(2, '0')}/'
-              '${venue.createdAt.year}',
+          value: '${v.createdAt.day.toString().padLeft(2, '0')}/'
+              '${v.createdAt.month.toString().padLeft(2, '0')}/'
+              '${v.createdAt.year}',
         ),
       ],
+    );
+  }
+}
+
+class _OccupancySection extends ConsumerStatefulWidget {
+  final SportsVenueModel venue;
+  const _OccupancySection({required this.venue});
+
+  @override
+  ConsumerState<_OccupancySection> createState() =>
+      _OccupancySectionState();
+}
+
+class _OccupancySectionState extends ConsumerState<_OccupancySection> {
+  bool _saving = false;
+
+  Future<void> _set(VenueOccupancy o) async {
+    setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final res = await ref.read(sportsRepositoryProvider).updateOccupancy(
+          venueId: widget.venue.id,
+          occupancy: o,
+        );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) => messenger.showSnackBar(
+        SnackBar(content: Text('Status atualizado: ${o.label}')),
+      ),
+    );
+  }
+
+  Color _colorFor(VenueOccupancy o, ColorScheme cs) {
+    switch (o) {
+      case VenueOccupancy.empty:
+        return Colors.green;
+      case VenueOccupancy.few:
+        return Colors.orange;
+      case VenueOccupancy.full:
+        return Colors.red;
+      case VenueOccupancy.unknown:
+        return cs.onSurfaceVariant;
+    }
+  }
+
+  IconData _iconFor(VenueOccupancy o) {
+    switch (o) {
+      case VenueOccupancy.empty:
+        return Icons.sentiment_very_satisfied_rounded;
+      case VenueOccupancy.few:
+        return Icons.groups_2_rounded;
+      case VenueOccupancy.full:
+        return Icons.groups_rounded;
+      case VenueOccupancy.unknown:
+        return Icons.help_outline_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final v = widget.venue;
+    final color = _colorFor(v.occupancy, cs);
+    final updated = v.occupancyUpdatedAt;
+
+    String? updatedLabel() {
+      if (updated == null) return null;
+      final diff = DateTime.now().difference(updated);
+      if (diff.inMinutes < 1) return 'agora há pouco';
+      if (diff.inHours < 1) return 'há ${diff.inMinutes}min';
+      if (diff.inDays < 1) return 'há ${diff.inHours}h';
+      return '${updated.day.toString().padLeft(2, '0')}/'
+          '${updated.month.toString().padLeft(2, '0')} '
+          '${updated.hour.toString().padLeft(2, '0')}:'
+          '${updated.minute.toString().padLeft(2, '0')}';
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(_iconFor(v.occupancy), color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Como está agora?',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        v.occupancy == VenueOccupancy.unknown
+                            ? 'Sem atualização recente.'
+                            : '${v.occupancy.label}'
+                                '${updatedLabel() != null ? ' • atualizado ${updatedLabel()}' : ''}',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _OccupancyChip(
+                  label: 'Vazio',
+                  icon: Icons.sentiment_very_satisfied_rounded,
+                  color: Colors.green,
+                  selected: v.occupancy == VenueOccupancy.empty,
+                  onTap: _saving ? null : () => _set(VenueOccupancy.empty),
+                ),
+                _OccupancyChip(
+                  label: 'Poucas pessoas',
+                  icon: Icons.groups_2_rounded,
+                  color: Colors.orange,
+                  selected: v.occupancy == VenueOccupancy.few,
+                  onTap: _saving ? null : () => _set(VenueOccupancy.few),
+                ),
+                _OccupancyChip(
+                  label: 'Cheio',
+                  icon: Icons.groups_rounded,
+                  color: Colors.red,
+                  selected: v.occupancy == VenueOccupancy.full,
+                  onTap: _saving ? null : () => _set(VenueOccupancy.full),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OccupancyChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _OccupancyChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(icon, size: 18, color: selected ? Colors.white : color),
+      label: Text(label,
+          style: TextStyle(
+            color: selected ? Colors.white : null,
+            fontWeight: selected ? FontWeight.w600 : null,
+          )),
+      backgroundColor: selected ? color : null,
+      side: BorderSide(color: color.withValues(alpha: 0.6)),
+      onPressed: onTap,
     );
   }
 }

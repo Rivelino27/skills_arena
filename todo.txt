@@ -1,5 +1,29 @@
 Falta arrumar / incluir:
 
+Em home as vezes em tocar no usuario do post, não abre a pagina do user e só clicando mais uma vez abre.
+
+Em explorar no acesso rapido mostrar a listagem de quadras e jogadores direto ao clicar nela, e clicando na quadra da lista abrir o local no mapa, e no user a mensagem.
+Assim como os icones do mapa de jogadores e quadras, ao clicar nele e aparecer a quadra clicando na quadra o mapa levar até a quadra.
+
+Cada user deve poder colocar seu endereço atual assim, se ele falar que quer jogar hoje aparece o endereço dele no mapa, mas sempre aparecer ele na listagem se ele estiver dentro do raio de pesquisa.
+Minha duvida é, não seria melhor o user ver o endereço fixo dos outros users no mapa? pois se ver a localização em tempo real de todos gera muito processamento e consumo de dados né?
+vamos fazer o seguinte, em uma conversa é possivel ver a locaalização real da pessoa que esta conversando se ele autorizaar e deve aparecer no chat o botão do maparaa para um ver onde o outro estaa no mapa.
+
+Além de ver quais pessoas querem jogar na região no raio de X km,ao aabrir umaa quadra o user pode marcar que ele vai jogar na quadra / local em questão e que horario ele vai jogar e sair (padrão de dauas horas, mas ele pode editaar o tempo) 
+dai outro user pode abrir a quadra e vber que outros users marcaraam presença e ele pode marcar sua presença paraa jogar no mesmo horario que os outros users também.
+Cada quadra / local ao cadastrar deve ser classificado como particular ou publico, cada quadra / local pode ter seu status mudado para cheio, vazio, poucas pessoas taambém e mostrar o dia e hora que foi aatualizado.
+
+Colocar notificação de mensagens, até na barra de navegação no icone chat, quando chegar mensagens novas.
+
+
+Arrume:
+
+Ao adicionar quadra ou local novo ao mover o pin deve aparecer em baixo quaal é o endereço rua, cep que o pin esta para salvar.
+Ao apertar em pesquisar na lupaa quqndo estamos adicionando o local do esporte, a barra com o form de busca para digitar fica atras de mova o mapa para posicionaar o pin.
+
+
+<<_______________ Abaixo já foi resolvido (ignorar):
+
 Os users devem ter a opção na aba explorar de colocar seu status atual de fora pratica, disponivel para jogar hoje, 
 nas proximas 17h, raio de busca personalizado 5 km 7km 10 km etc, passando 24h esse status quero jogar é desativado, mas mesmo
 ele sendo desativado o user pode ativar ou desativar sua visualização na região, assim tera dois tipos de busca jogar hoje
@@ -19,7 +43,7 @@ W/Firestore(11362): (24.11.0) [Firestore]: Write failed at posts/XOU4xHhvw9cjHFh
 
 
 
-<<_______________ past :
+
 
 falta poder comentar em postagens, mandar mensagens para a pessoas da postagem clicando nela e vendo o perfil dela.
 A pessoa pode postar links do tik tok também nas postagens.

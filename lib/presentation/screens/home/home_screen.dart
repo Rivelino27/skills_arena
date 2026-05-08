@@ -96,6 +96,7 @@ class _PostCard extends StatelessWidget {
         children: [
           // Header — toca no avatar/nome para ver perfil
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: onViewProfile,
             child: Row(
               children: [

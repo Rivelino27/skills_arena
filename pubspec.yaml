@@ -55,6 +55,7 @@ dev_dependencies:
   flutter_lints: ^3.0.0
 
 # para colocar o icone do app, imagem quadrada, usar o comando: dart run flutter_launcher_icons:generate e para trocar icone usar o dart run flutter_launcher_icons:generate -o -- depois para aplicar flutter pub run flutter_launcher_icons
+# se gera ro arquivo flutter_launcher_icones.yaml, pode ser usado para configurar o icone do app, exemplo:
 flutter_launcher_icons:
   android: true
   ios: true

@@ -21,3 +21,12 @@ final usersStreamProvider = StreamProvider<List<UserModel>>((ref) {
   final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
   return ref.watch(chatRepositoryProvider).usersStream(uid);
 });
+
+/// Total number of conversations with at least one unread message
+/// for the currently signed-in user.
+final unreadConversationsCountProvider = Provider<int>((ref) {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return 0;
+  final convs = ref.watch(conversationsStreamProvider).valueOrNull ?? const [];
+  return convs.where((c) => c.hasUnreadFor(uid)).length;
+});

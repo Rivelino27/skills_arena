@@ -38,6 +38,29 @@ class SportsRepository {
     }
   }
 
+  /// Any signed-in user can update the live occupancy + timestamp.
+  /// Permission to write only the three fields is enforced by Firestore rules.
+  Future<Either<AppFailure, Unit>> updateOccupancy({
+    required String venueId,
+    required VenueOccupancy occupancy,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      await _venues.doc(venueId).update({
+        'occupancy': occupancy.storageKey,
+        'occupancyUpdatedAt': Timestamp.now(),
+        'occupancyUpdatedBy': user.uid,
+      });
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao atualizar status da quadra.'));
+    }
+  }
+
   // ─── Disponibilidade de Jogadores ──────────────────────────────────────────
 
   Stream<List<PlayerAvailabilityModel>> availabilityStream() => _availability

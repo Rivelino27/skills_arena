@@ -38,6 +38,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final _scrollCtrl = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chatRepositoryProvider).markAsRead(widget.chatId);
+    });
+  }
+
+  @override
   void dispose() {
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -115,6 +123,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   );
                 }
                 _scrollToBottom();
+                // Keep marking as read while screen is open and new
+                // messages arrive.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  ref
+                      .read(chatRepositoryProvider)
+                      .markAsRead(widget.chatId);
+                });
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.symmetric(
