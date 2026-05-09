@@ -44,6 +44,14 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
+    // ── Venue attendance (quem vai jogar onde / quando) ───────────────────
+    // Field: `userId` (the attendee)
+    match /venue_attendance/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
     // ── Posts ─────────────────────────────────────────────────────────────
     // Field: `userId` (post author).
     // Anyone signed-in can update `likedBy`, `likesCount`, `commentsCount`

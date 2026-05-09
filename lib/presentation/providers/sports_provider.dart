@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/player_availability_model.dart';
 import '../../data/models/sports_venue_model.dart';
+import '../../data/models/venue_attendance_model.dart';
 import '../../data/repositories/sports_repository.dart';
 
 final venuesStreamProvider = StreamProvider<List<SportsVenueModel>>((ref) {
@@ -31,6 +32,13 @@ final myAvailabilityProvider =
     return m.isActive ? m : null;
   });
 });
+
+/// Live attendance for a given venue (only docs where endAt > now).
+final venueAttendanceProvider =
+    StreamProvider.family<List<VenueAttendanceModel>, String>(
+  (ref, venueId) =>
+      ref.watch(sportsRepositoryProvider).attendanceStream(venueId),
+);
 
 /// Filtro de esporte selecionado no mapa (null = todos).
 final selectedSportFilterProvider = StateProvider<String?>((ref) => null);

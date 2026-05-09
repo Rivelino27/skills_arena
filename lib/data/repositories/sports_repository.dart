@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_failure.dart';
 import '../models/player_availability_model.dart';
 import '../models/sports_venue_model.dart';
+import '../models/venue_attendance_model.dart';
 
 final sportsRepositoryProvider = Provider<SportsRepository>((ref) {
   return SportsRepository(firestore: FirebaseFirestore.instance);
@@ -21,6 +22,9 @@ class SportsRepository {
 
   CollectionReference<Map<String, dynamic>> get _availability =>
       _db.collection('player_availability');
+
+  CollectionReference<Map<String, dynamic>> get _attendance =>
+      _db.collection('venue_attendance');
 
   // ─── Quadras ───────────────────────────────────────────────────────────────
 
@@ -113,6 +117,74 @@ class SportsRepository {
       }
       final existing =
           await _availability.where('userId', isEqualTo: user.uid).get();
+      for (final doc in existing.docs) {
+        await doc.reference.delete();
+      }
+      return const Right(unit);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  // ─── Presença em quadra (venue attendance) ─────────────────────────────────
+
+  /// Live stream of attendees for a venue whose end time hasn't passed.
+  Stream<List<VenueAttendanceModel>> attendanceStream(String venueId) =>
+      _attendance
+          .where('venueId', isEqualTo: venueId)
+          .where('endAt', isGreaterThan: Timestamp.now())
+          .snapshots()
+          .map((s) => s.docs.map(VenueAttendanceModel.fromFirestore).toList()
+            ..sort((a, b) => a.startAt.compareTo(b.startAt)));
+
+  Future<Either<AppFailure, Unit>> markAttendance({
+    required String venueId,
+    required DateTime startAt,
+    required Duration duration,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      // Replace any existing attendance from this user at this venue.
+      final existing = await _attendance
+          .where('venueId', isEqualTo: venueId)
+          .where('userId', isEqualTo: user.uid)
+          .get();
+      for (final doc in existing.docs) {
+        await doc.reference.delete();
+      }
+      final now = DateTime.now();
+      final endAt = startAt.add(duration);
+      final model = VenueAttendanceModel(
+        id: '',
+        venueId: venueId,
+        userId: user.uid,
+        userName: user.displayName ?? 'Usuário',
+        userPhotoUrl: user.photoURL,
+        startAt: startAt,
+        endAt: endAt,
+        createdAt: now,
+      );
+      await _attendance.add(model.toMap());
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao marcar presença.'));
+    }
+  }
+
+  Future<Either<AppFailure, Unit>> removeMyAttendance(String venueId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      final existing = await _attendance
+          .where('venueId', isEqualTo: venueId)
+          .where('userId', isEqualTo: user.uid)
+          .get();
       for (final doc in existing.docs) {
         await doc.reference.delete();
       }

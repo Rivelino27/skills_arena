@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/models/venue_attendance_model.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/post_provider.dart';
@@ -175,6 +178,10 @@ class _InfoTab extends ConsumerWidget {
 
         // ── Status atual da quadra ─────────────────────────────────────
         _OccupancySection(venue: v),
+        const SizedBox(height: 8),
+
+        // ── Quem vai jogar lá ─────────────────────────────────────────
+        _AttendanceSection(venueId: v.id),
         const SizedBox(height: 8),
 
         _InfoTile(
@@ -863,6 +870,375 @@ class _AddPostSheetState extends ConsumerState<_AddPostSheet> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Text('Publicar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Quem vai jogar lá ──────────────────────────────────────────────────────
+
+class _AttendanceSection extends ConsumerWidget {
+  final String venueId;
+  const _AttendanceSection({required this.venueId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final attendees =
+        ref.watch(venueAttendanceProvider(venueId)).valueOrNull ?? const [];
+    final mine = attendees.where((a) => a.userId == myUid).firstOrNull;
+    final others = attendees.where((a) => a.userId != myUid).toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_available_rounded, color: cs.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Quem vai jogar lá',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        attendees.isEmpty
+                            ? 'Ninguém marcou presença ainda.'
+                            : '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'} confirmada${attendees.length == 1 ? '' : 's'}.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (mine != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded,
+                        color: cs.onPrimaryContainer),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Você marcou: ${_formatRange(mine.startAt, mine.endAt)}',
+                        style: TextStyle(color: cs.onPrimaryContainer),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _cancel(context, ref),
+                      child: const Text('Cancelar'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (others.isNotEmpty) ...[
+              ...others.map((a) => _AttendeeTile(
+                    attendance: a,
+                    onJoin: () => _joinSlot(context, ref, a),
+                  )),
+              const SizedBox(height: 8),
+            ],
+            FilledButton.icon(
+              onPressed: () => _showMarkSheet(context, ref),
+              icon: Icon(mine == null
+                  ? Icons.add_rounded
+                  : Icons.edit_calendar_rounded),
+              label: Text(mine == null
+                  ? 'Vou jogar nessa quadra'
+                  : 'Alterar meu horário'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMarkSheet(BuildContext context, WidgetRef ref,
+      {DateTime? prefilledStart, Duration? prefilledDuration}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await showModalBottomSheet<_MarkAttendanceResult>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _MarkAttendanceSheet(
+        initialStart: prefilledStart,
+        initialDuration: prefilledDuration,
+      ),
+    );
+    if (result == null) return;
+    final res = await ref.read(sportsRepositoryProvider).markAttendance(
+          venueId: venueId,
+          startAt: result.start,
+          duration: result.duration,
+        );
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) => messenger.showSnackBar(
+        const SnackBar(content: Text('Presença marcada!')),
+      ),
+    );
+  }
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final res =
+        await ref.read(sportsRepositoryProvider).removeMyAttendance(venueId);
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) => messenger.showSnackBar(
+        const SnackBar(content: Text('Presença cancelada.')),
+      ),
+    );
+  }
+
+  void _joinSlot(
+      BuildContext context, WidgetRef ref, VenueAttendanceModel a) {
+    _showMarkSheet(
+      context,
+      ref,
+      prefilledStart: a.startAt,
+      prefilledDuration: a.endAt.difference(a.startAt),
+    );
+  }
+
+  static String _formatRange(DateTime s, DateTime e) {
+    String hh(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final sameDay = s.year == e.year && s.month == e.month && s.day == e.day;
+    final today = DateTime.now();
+    final isToday = s.year == today.year &&
+        s.month == today.month &&
+        s.day == today.day;
+    final dayLabel = isToday
+        ? 'hoje'
+        : '${s.day.toString().padLeft(2, '0')}/${s.month.toString().padLeft(2, '0')}';
+    return sameDay
+        ? '$dayLabel ${hh(s)} – ${hh(e)}'
+        : '$dayLabel ${hh(s)} → ${hh(e)}';
+  }
+}
+
+class _AttendeeTile extends StatelessWidget {
+  final VenueAttendanceModel attendance;
+  final VoidCallback onJoin;
+
+  const _AttendeeTile({required this.attendance, required this.onJoin});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundImage: attendance.userPhotoUrl != null
+            ? NetworkImage(attendance.userPhotoUrl!)
+            : null,
+        backgroundColor: cs.primaryContainer,
+        child: attendance.userPhotoUrl == null
+            ? Text(
+                attendance.userName.isNotEmpty
+                    ? attendance.userName[0].toUpperCase()
+                    : '?',
+                style: TextStyle(color: cs.onPrimaryContainer),
+              )
+            : null,
+      ),
+      title: Text(attendance.userName,
+          style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        _AttendanceSection._formatRange(
+            attendance.startAt, attendance.endAt),
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: cs.onSurfaceVariant),
+      ),
+      trailing: TextButton.icon(
+        onPressed: onJoin,
+        icon: const Icon(Icons.group_add_rounded, size: 18),
+        label: const Text('Juntar'),
+      ),
+    );
+  }
+}
+
+class _MarkAttendanceResult {
+  final DateTime start;
+  final Duration duration;
+  const _MarkAttendanceResult(this.start, this.duration);
+}
+
+class _MarkAttendanceSheet extends StatefulWidget {
+  final DateTime? initialStart;
+  final Duration? initialDuration;
+  const _MarkAttendanceSheet({this.initialStart, this.initialDuration});
+
+  @override
+  State<_MarkAttendanceSheet> createState() => _MarkAttendanceSheetState();
+}
+
+class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
+  late DateTime _start;
+  late int _durationMin;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _start = widget.initialStart ??
+        DateTime(now.year, now.month, now.day, now.hour + 1);
+    _durationMin = widget.initialDuration?.inMinutes ?? 120;
+  }
+
+  Future<void> _pickStart() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _start,
+      firstDate: DateTime.now().subtract(const Duration(hours: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+    );
+    if (pickedDate == null || !mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_start),
+    );
+    if (pickedTime == null) return;
+    setState(() {
+      _start = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
+  String _fmtStart() {
+    final today = DateTime.now();
+    final isToday = _start.year == today.year &&
+        _start.month == today.month &&
+        _start.day == today.day;
+    final hh = '${_start.hour.toString().padLeft(2, '0')}:'
+        '${_start.minute.toString().padLeft(2, '0')}';
+    return isToday
+        ? 'Hoje, $hh'
+        : '${_start.day.toString().padLeft(2, '0')}/'
+            '${_start.month.toString().padLeft(2, '0')} $hh';
+  }
+
+  String _fmtDuration() {
+    final h = _durationMin ~/ 60;
+    final m = _durationMin % 60;
+    if (h == 0) return '${m}min';
+    return m == 0 ? '${h}h' : '${h}h ${m}min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Marcar presença',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(
+            'Outros jogadores verão seu horário e poderão se juntar.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 20),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            leading: const Icon(Icons.schedule_rounded),
+            title: const Text('Início'),
+            subtitle: Text(_fmtStart()),
+            trailing: const Icon(Icons.edit_rounded),
+            onTap: _pickStart,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.timer_rounded),
+              const SizedBox(width: 8),
+              Text('Duração: ${_fmtDuration()}',
+                  style: theme.textTheme.bodyLarge),
+            ],
+          ),
+          Slider(
+            value: _durationMin.toDouble(),
+            min: 30,
+            max: 360,
+            divisions: 11,
+            label: _fmtDuration(),
+            onChanged: (v) => setState(() => _durationMin = v.round()),
+          ),
+          Wrap(
+            spacing: 8,
+            children: const [60, 90, 120, 180]
+                .map((m) => ChoiceChip(
+                      label: Text(m == 60
+                          ? '1h'
+                          : m == 90
+                              ? '1h30'
+                              : m == 120
+                                  ? '2h'
+                                  : '3h'),
+                      selected: _durationMin == m,
+                      onSelected: (_) => setState(() => _durationMin = m),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(
+              _MarkAttendanceResult(
+                  _start, Duration(minutes: _durationMin)),
+            ),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Confirmar presença'),
           ),
         ],
       ),
