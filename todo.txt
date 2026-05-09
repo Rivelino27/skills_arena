@@ -1,7 +1,15 @@
 Falta arrumar / incluir:
 
 Voltar entre telas das abas bottom nav bar de uma para outra sem destruir o historico de navegação bottom.
+tente arrumar:
 
+https://github.com/Rivelino27/skills_arena/tree/nav_bar_reestabelecida_fix
+
+O ir para telas entre telas de abas diferentes da botom app bar não funciona, o voltar personalizado para home, explorer não funciona.
+
+tentei arrumar mas sempre destroi o historico de navegação entre abas, tentea rrumar sem destruir o historico de navegação entre abas, quando tinha tentado arrumar em uma soluçãod e uma ia funcionou mas ao apertar saia da tela em outro código ao invés de manter o historico de navegação entre abas.
+
+Voltar entre telas das abas bottom nav bar de uma para outra sem destruir o historico de navegação bottom.
 
 >> feito, ignorara abaixo:
 
