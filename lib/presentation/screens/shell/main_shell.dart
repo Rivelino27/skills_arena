@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/chat_provider.dart';
+import '../../providers/main_tab_provider.dart';
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
 import '../home/home_screen.dart';
@@ -47,6 +48,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         }
         _currentIndex = index;
       });
+      // Keep external provider in sync so consumers (and re-entrancy of
+      // ref.listen) read the current tab.
+      if (ref.read(mainTabProvider) != index) {
+        ref.read(mainTabProvider.notifier).state = index;
+      }
     }
   }
 
@@ -71,6 +77,14 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final unreadChats = ref.watch(unreadConversationsCountProvider);
+
+    // Allow any screen to jump to a tab by writing to mainTabProvider.
+    // We sync the shell's internal _currentIndex when it changes externally.
+    ref.listen<int>(mainTabProvider, (prev, next) {
+      if (next != _currentIndex && next >= 0 && next < 4) {
+        _onTabTapped(next);
+      }
+    });
 
     return PopScope(
       canPop: false,

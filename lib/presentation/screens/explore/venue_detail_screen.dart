@@ -188,6 +188,10 @@ class _InfoTab extends ConsumerWidget {
         _AttendanceSection(venueId: v.id, venueName: v.name),
         const SizedBox(height: 8),
 
+        // ── Jogadores na região (querem jogar perto desta quadra) ─────
+        _NearbyPlayersSection(venue: v),
+        const SizedBox(height: 8),
+
         // ── Como chegar (Google Maps / Uber) ──────────────────────────
         _NavigationSection(venue: v),
         const SizedBox(height: 8),
@@ -1367,6 +1371,139 @@ class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
             label: const Text('Confirmar presença'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Jogadores na região (querem jogar perto desta quadra) ────────────────
+
+class _NearbyPlayersSection extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _NearbyPlayersSection({required this.venue});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final allPlayers =
+        ref.watch(availabilityStreamProvider).valueOrNull ?? const [];
+
+    // A player is "nearby this venue" when the venue lat/lng falls within
+    // the player's own search radius from where they marked availability.
+    final nearby = allPlayers.where((p) {
+      if (p.userId == myUid) return false;
+      final d = GeoUtils.distanceKm(p.lat, p.lng, venue.lat, venue.lng);
+      return d <= p.radiusKm;
+    }).toList()
+      ..sort((a, b) {
+        final da = GeoUtils.distanceKm(a.lat, a.lng, venue.lat, venue.lng);
+        final db = GeoUtils.distanceKm(b.lat, b.lng, venue.lat, venue.lng);
+        return da.compareTo(db);
+      });
+
+    // Group by sport for the chip row.
+    final bySport = <String, int>{};
+    for (final p in nearby) {
+      bySport.update(p.sport, (n) => n + 1, ifAbsent: () => 1);
+    }
+    final sportEntries = bySport.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.groups_3_rounded, color: cs.tertiary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Jogadores na região',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        nearby.isEmpty
+                            ? 'Ninguém marcou “quero jogar” por aqui ainda.'
+                            : '${nearby.length} jogador${nearby.length == 1 ? '' : 'es'} '
+                                'querem jogar perto desta quadra',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (nearby.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: sportEntries
+                    .map((e) => Chip(
+                          avatar:
+                              const Icon(Icons.sports_rounded, size: 14),
+                          label: Text('${e.key} • ${e.value}',
+                              style: const TextStyle(fontSize: 12)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              ...nearby.take(5).map((p) {
+                final dist = GeoUtils.distanceKm(
+                    p.lat, p.lng, venue.lat, venue.lng);
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  leading: CircleAvatar(
+                    radius: 18,
+                    backgroundImage: p.userPhotoUrl != null
+                        ? NetworkImage(p.userPhotoUrl!)
+                        : null,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    child: p.userPhotoUrl == null
+                        ? Text(
+                            p.userName.isNotEmpty
+                                ? p.userName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(fontSize: 13),
+                          )
+                        : null,
+                  ),
+                  title: Text(p.userName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(
+                    '${p.sport} • ${GeoUtils.formatDistance(dist)}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                );
+              }),
+              if (nearby.length > 5)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '+ ${nearby.length - 5} jogador'
+                    '${nearby.length - 5 == 1 ? '' : 'es'} '
+                    'na lista completa.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }
