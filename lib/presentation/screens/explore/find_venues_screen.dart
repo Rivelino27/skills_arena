@@ -124,7 +124,7 @@ class _FindVenuesScreenState extends ConsumerState<FindVenuesScreen> {
   }
 
   void _openDetail(SportsVenueModel v, double? lat, double? lng) {
-    AppNavigator.pushWithoutNavBar(
+    AppNavigator.pushWithNavBar(
       context,
       VenueDetailScreen(venue: v, userLat: lat, userLng: lng),
     );

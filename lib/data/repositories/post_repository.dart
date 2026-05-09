@@ -126,6 +126,29 @@ class PostRepository {
     }
   }
 
+  Future<Either<AppFailure, Unit>> deleteComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Não autenticado.'));
+      }
+      final batch = _db.batch();
+      batch.delete(
+          _posts.doc(postId).collection('comments').doc(commentId));
+      batch.update(_posts.doc(postId), {
+        'commentsCount': FieldValue.increment(-1),
+      });
+      await batch.commit();
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao apagar comentário.'));
+    }
+  }
+
   // ─── Compartilhar ─────────────────────────────────────────────────────────
 
   Future<void> sharePost(PostModel post) async {

@@ -6,7 +6,7 @@ import '../../../data/models/sports_venue_model.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../widgets/navigation/custom_back_button.dart';
 
-/// Tela de adicionar quadra — sem bottom nav bar (pushWithoutNavBar).
+/// Tela de adicionar quadra — bottom nav bar visível (pushWithNavBar).
 class AddVenueScreen extends ConsumerStatefulWidget {
   final double? userLat;
   final double? userLng;

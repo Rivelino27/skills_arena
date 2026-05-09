@@ -4,14 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../../data/models/venue_attendance_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/sports_provider.dart';
+import '../chat/conversation_screen.dart';
 
 class VenueDetailScreen extends ConsumerStatefulWidget {
   final SportsVenueModel venue;
@@ -182,7 +185,7 @@ class _InfoTab extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // ── Quem vai jogar lá ─────────────────────────────────────────
-        _AttendanceSection(venueId: v.id),
+        _AttendanceSection(venueId: v.id, venueName: v.name),
         const SizedBox(height: 8),
 
         // ── Como chegar (Google Maps / Uber) ──────────────────────────
@@ -886,7 +889,11 @@ class _AddPostSheetState extends ConsumerState<_AddPostSheet> {
 
 class _AttendanceSection extends ConsumerWidget {
   final String venueId;
-  const _AttendanceSection({required this.venueId});
+  final String venueName;
+  const _AttendanceSection({required this.venueId, required this.venueName});
+
+  static String _slotKey(DateTime dt) =>
+      '${dt.year}-${dt.month}-${dt.day}-${dt.hour}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -896,7 +903,15 @@ class _AttendanceSection extends ConsumerWidget {
     final attendees =
         ref.watch(venueAttendanceProvider(venueId)).valueOrNull ?? const [];
     final mine = attendees.where((a) => a.userId == myUid).firstOrNull;
-    final others = attendees.where((a) => a.userId != myUid).toList();
+
+    // Group by hour slot (date + hour).
+    final slots = <String, List<VenueAttendanceModel>>{};
+    for (final a in attendees) {
+      slots.putIfAbsent(_slotKey(a.startAt), () => []).add(a);
+    }
+    final slotEntries = slots.entries.toList()
+      ..sort((a, b) =>
+          a.value.first.startAt.compareTo(b.value.first.startAt));
 
     return Card(
       child: Padding(
@@ -918,7 +933,8 @@ class _AttendanceSection extends ConsumerWidget {
                       Text(
                         attendees.isEmpty
                             ? 'Ninguém marcou presença ainda.'
-                            : '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'} confirmada${attendees.length == 1 ? '' : 's'}.',
+                            : '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'} • '
+                                '${slots.length} horário${slots.length == 1 ? '' : 's'}',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.onSurfaceVariant),
                       ),
@@ -928,41 +944,30 @@ class _AttendanceSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            if (mine != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: cs.onPrimaryContainer),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Você marcou: ${_formatRange(mine.startAt, mine.endAt)}',
-                        style: TextStyle(color: cs.onPrimaryContainer),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _cancel(context, ref),
-                      child: const Text('Cancelar'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (others.isNotEmpty) ...[
-              ...others.map((a) => _AttendeeTile(
-                    attendance: a,
-                    onJoin: () => _joinSlot(context, ref, a),
-                  )),
-              const SizedBox(height: 8),
-            ],
+            ...slotEntries.map((e) {
+              final slotList = e.value;
+              final slotStart = slotList.first.startAt;
+              final imIn = slotList.any((a) => a.userId == myUid);
+              return _SlotCard(
+                attendees: slotList,
+                slotStart: slotStart,
+                myUid: myUid,
+                onOpenChat: imIn
+                    ? () => _openSlotChat(context, ref, slotStart)
+                    : null,
+                onJoinSlot: imIn
+                    ? null
+                    : () => _showMarkSheet(
+                          context,
+                          ref,
+                          prefilledStart: slotStart,
+                          prefilledDuration: slotList.first.endAt
+                              .difference(slotStart),
+                        ),
+                onCancel: imIn ? () => _cancel(context, ref) : null,
+              );
+            }),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () => _showMarkSheet(context, ref),
               icon: Icon(mine == null
@@ -997,11 +1002,23 @@ class _AttendanceSection extends ConsumerWidget {
           startAt: result.start,
           duration: result.duration,
         );
-    res.fold(
-      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
-      (_) => messenger.showSnackBar(
-        const SnackBar(content: Text('Presença marcada!')),
-      ),
+    if (!context.mounted) return;
+    await res.fold(
+      (f) async => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) async {
+        // Auto-join the venue-slot group chat for this slot.
+        try {
+          await ref.read(chatRepositoryProvider).getOrCreateVenueSlotChat(
+                venueId: venueId,
+                venueName: venueName,
+                startAt: result.start,
+              );
+        } catch (_) {/* non-fatal */}
+        messenger.showSnackBar(
+          const SnackBar(
+              content: Text('Presença marcada! Grupo do horário pronto.')),
+        );
+      },
     );
   }
 
@@ -1017,71 +1034,175 @@ class _AttendanceSection extends ConsumerWidget {
     );
   }
 
-  void _joinSlot(
-      BuildContext context, WidgetRef ref, VenueAttendanceModel a) {
-    _showMarkSheet(
-      context,
-      ref,
-      prefilledStart: a.startAt,
-      prefilledDuration: a.endAt.difference(a.startAt),
-    );
+  Future<void> _openSlotChat(
+      BuildContext context, WidgetRef ref, DateTime slotStart) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateVenueSlotChat(
+                venueId: venueId,
+                venueName: venueName,
+                startAt: slotStart,
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Erro ao abrir grupo: $e')));
+    }
   }
 
-  static String _formatRange(DateTime s, DateTime e) {
-    String hh(DateTime d) =>
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    final sameDay = s.year == e.year && s.month == e.month && s.day == e.day;
-    final today = DateTime.now();
-    final isToday = s.year == today.year &&
-        s.month == today.month &&
-        s.day == today.day;
-    final dayLabel = isToday
-        ? 'hoje'
-        : '${s.day.toString().padLeft(2, '0')}/${s.month.toString().padLeft(2, '0')}';
-    return sameDay
-        ? '$dayLabel ${hh(s)} – ${hh(e)}'
-        : '$dayLabel ${hh(s)} → ${hh(e)}';
-  }
 }
 
-class _AttendeeTile extends StatelessWidget {
-  final VenueAttendanceModel attendance;
-  final VoidCallback onJoin;
+class _SlotCard extends StatelessWidget {
+  final List<VenueAttendanceModel> attendees;
+  final DateTime slotStart;
+  final String myUid;
+  final VoidCallback? onOpenChat;
+  final VoidCallback? onJoinSlot;
+  final VoidCallback? onCancel;
 
-  const _AttendeeTile({required this.attendance, required this.onJoin});
+  const _SlotCard({
+    required this.attendees,
+    required this.slotStart,
+    required this.myUid,
+    this.onOpenChat,
+    this.onJoinSlot,
+    this.onCancel,
+  });
+
+  String _slotLabel() {
+    final now = DateTime.now();
+    final isToday = slotStart.year == now.year &&
+        slotStart.month == now.month &&
+        slotStart.day == now.day;
+    final isTomorrow = slotStart.year == now.year &&
+        slotStart.month == now.month &&
+        slotStart.day == now.day + 1;
+    final hh = slotStart.hour.toString().padLeft(2, '0');
+    final next = ((slotStart.hour + 1) % 24).toString().padLeft(2, '0');
+    final dayPart = isToday
+        ? 'Hoje'
+        : isTomorrow
+            ? 'Amanhã'
+            : '${slotStart.day.toString().padLeft(2, '0')}/'
+                '${slotStart.month.toString().padLeft(2, '0')}';
+    return '$dayPart • ${hh}h–${next}h';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundImage: attendance.userPhotoUrl != null
-            ? NetworkImage(attendance.userPhotoUrl!)
-            : null,
-        backgroundColor: cs.primaryContainer,
-        child: attendance.userPhotoUrl == null
-            ? Text(
-                attendance.userName.isNotEmpty
-                    ? attendance.userName[0].toUpperCase()
-                    : '?',
-                style: TextStyle(color: cs.onPrimaryContainer),
-              )
-            : null,
+    final iAmIn = onOpenChat != null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: iAmIn
+            ? cs.primaryContainer.withValues(alpha: 0.5)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: iAmIn
+              ? cs.primary.withValues(alpha: 0.4)
+              : cs.outlineVariant,
+        ),
       ),
-      title: Text(attendance.userName,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-        _AttendanceSection._formatRange(
-            attendance.startAt, attendance.endAt),
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: cs.onSurfaceVariant),
-      ),
-      trailing: TextButton.icon(
-        onPressed: onJoin,
-        icon: const Icon(Icons.group_add_rounded, size: 18),
-        label: const Text('Juntar'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule_rounded,
+                  size: 18, color: iAmIn ? cs.primary : cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(_slotLabel(),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: attendees
+                .map((a) => Chip(
+                      avatar: CircleAvatar(
+                        radius: 10,
+                        backgroundImage: a.userPhotoUrl != null
+                            ? NetworkImage(a.userPhotoUrl!)
+                            : null,
+                        backgroundColor: cs.surfaceContainerHighest,
+                        child: a.userPhotoUrl == null
+                            ? Text(
+                                a.userName.isNotEmpty
+                                    ? a.userName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(fontSize: 10),
+                              )
+                            : null,
+                      ),
+                      label: Text(
+                        a.userId == myUid ? 'Você' : a.userName,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (onOpenChat != null)
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onOpenChat,
+                    icon: const Icon(Icons.forum_rounded, size: 18),
+                    label: const Text('Abrir grupo'),
+                  ),
+                ),
+              if (onJoinSlot != null)
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onJoinSlot,
+                    icon: const Icon(Icons.group_add_rounded, size: 18),
+                    label: const Text('Juntar a este horário'),
+                  ),
+                ),
+              if (onCancel != null) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: onCancel,
+                  child: const Text('Cancelar'),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

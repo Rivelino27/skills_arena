@@ -75,18 +75,27 @@ service cloud.firestore {
     }
 
     // ── Chats ─────────────────────────────────────────────────────────────
-    // Field: `participants` (list of two UIDs).
+    // Field: `participants` (list of UIDs).
     // `resource == null` lets `getOrCreateConversation` probe before creating.
+    // Venue-slot group chats (`isVenueSlotGroup: true`) are public-join: any
+    // signed-in user can create with size>=1 or join an existing one.
     match /chats/{chatId} {
       allow get: if isSignedIn() && (
         resource == null || request.auth.uid in resource.data.participants
       );
       allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
       // size() >= 2 supports both 1-1 chats and N-party group chats.
+      // Venue-slot groups are an exception: created with the first attendee.
       allow create: if isSignedIn()
         && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants.size() >= 2;
-      allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
+        && (
+          request.resource.data.participants.size() >= 2
+          || request.resource.data.get('isVenueSlotGroup', false) == true
+        );
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+        || resource.data.get('isVenueSlotGroup', false) == true
+      );
       allow delete: if false;
 
       // Messages — field: `senderId`

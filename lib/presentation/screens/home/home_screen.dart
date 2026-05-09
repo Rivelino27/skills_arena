@@ -27,17 +27,15 @@ class HomeScreen extends ConsumerWidget {
         data: (posts) {
           if (posts.isEmpty) {
             return _EmptyFeed(
-              onPost: () => AppNavigator.pushWithoutNavBar(
+              onPost: () => AppNavigator.pushWithNavBar(
                   context, const CreatePostScreen()),
             );
           }
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(postsStreamProvider),
-            child: ListView.separated(
+            child: ListView.builder(
               padding: const EdgeInsets.only(top: 8, bottom: 80),
               itemCount: posts.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, thickness: 0.5),
               itemBuilder: (_, i) => _PostCard(
                 post: posts[i],
                 myUid: myUid,
@@ -58,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton(
         heroTag: null,
         onPressed: () =>
-            AppNavigator.pushWithoutNavBar(context, const CreatePostScreen()),
+            AppNavigator.pushWithNavBar(context, const CreatePostScreen()),
         tooltip: 'Nova publicação',
         child: const Icon(Icons.add_rounded),
       ),
@@ -89,9 +87,13 @@ class _PostCard extends StatelessWidget {
     final cs = theme.colorScheme;
     final isLiked = post.isLikedBy(myUid);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header — toca no avatar/nome para ver perfil
@@ -176,6 +178,7 @@ class _PostCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -185,7 +188,7 @@ class _PostCard extends StatelessWidget {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _CommentsSheet(post: post),
+      builder: (_) => _CommentsSheet(post: post, myUid: myUid),
     );
   }
 
@@ -458,7 +461,8 @@ class _ActionButton extends StatelessWidget {
 
 class _CommentsSheet extends ConsumerStatefulWidget {
   final PostModel post;
-  const _CommentsSheet({required this.post});
+  final String myUid;
+  const _CommentsSheet({required this.post, required this.myUid});
 
   @override
   ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
@@ -533,7 +537,11 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 8),
                   itemCount: comments.length,
-                  itemBuilder: (_, i) => _CommentTile(comment: comments[i]),
+                  itemBuilder: (_, i) => _CommentTile(
+                    comment: comments[i],
+                    postId: widget.post.id,
+                    myUid: widget.myUid,
+                  ),
                 );
               },
             ),
@@ -589,12 +597,19 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   }
 }
 
-class _CommentTile extends StatelessWidget {
+class _CommentTile extends ConsumerWidget {
   final CommentModel comment;
-  const _CommentTile({required this.comment});
+  final String postId;
+  final String myUid;
+
+  const _CommentTile({
+    required this.comment,
+    required this.postId,
+    required this.myUid,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final diff = DateTime.now().difference(comment.createdAt);
     final time = diff.inHours < 1
@@ -602,6 +617,7 @@ class _CommentTile extends StatelessWidget {
         : diff.inDays < 1
             ? '${diff.inHours}h'
             : '${diff.inDays}d';
+    final isMe = comment.userId == myUid;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -644,6 +660,27 @@ class _CommentTile extends StatelessWidget {
               ],
             ),
           ),
+          if (isMe)
+            IconButton(
+              iconSize: 18,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(Icons.delete_outline_rounded,
+                  color: cs.error),
+              tooltip: 'Apagar comentário',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await ref
+                    .read(postRepositoryProvider)
+                    .deleteComment(
+                        postId: postId,
+                        commentId: comment.id);
+                messenger.showSnackBar(
+                  const SnackBar(
+                      content: Text('Comentário apagado.')),
+                );
+              },
+            ),
         ],
       ),
     );

@@ -32,6 +32,62 @@ class ChatRepository {
     return '${sorted[0]}_${sorted[1]}';
   }
 
+  /// Deterministic chat ID for a venue + day + hour slot.
+  /// New day = new chat ID, so messages reset naturally each day.
+  static String buildVenueSlotChatId(String venueId, DateTime startAt) {
+    final date = '${startAt.year}'
+        '${startAt.month.toString().padLeft(2, '0')}'
+        '${startAt.day.toString().padLeft(2, '0')}';
+    final hour = startAt.hour.toString().padLeft(2, '0');
+    return 'venue_${venueId}_${date}_$hour';
+  }
+
+  /// Gets or joins the venue-slot group chat. Creates with current user
+  /// if it doesn't exist; otherwise adds current user to participants.
+  /// Anyone signed-in can join (Firestore rules permit isVenueSlotGroup chats).
+  Future<ConversationModel> getOrCreateVenueSlotChat({
+    required String venueId,
+    required String venueName,
+    required DateTime startAt,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser!;
+    final id = buildVenueSlotChatId(venueId, startAt);
+    final ref = _chats.doc(id);
+    final doc = await ref.get();
+
+    final hh = startAt.hour.toString().padLeft(2, '0');
+    final dd = startAt.day.toString().padLeft(2, '0');
+    final mm = startAt.month.toString().padLeft(2, '0');
+    final groupName = '$venueName • $dd/$mm ${hh}h';
+
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [me.uid],
+        'participantNames': {me.uid: me.displayName ?? 'Eu'},
+        'participantPhotos': {me.uid: me.photoURL},
+        'lastMessage': null,
+        'lastMessageAt': Timestamp.now(),
+        'isGroup': true,
+        'isVenueSlotGroup': true,
+        'venueId': venueId,
+        'groupName': groupName,
+      });
+    } else {
+      final data = doc.data()!;
+      final participants =
+          List<String>.from(data['participants'] as List? ?? []);
+      if (!participants.contains(me.uid)) {
+        await ref.update({
+          'participants': FieldValue.arrayUnion([me.uid]),
+          'participantNames.${me.uid}': me.displayName ?? 'Eu',
+          'participantPhotos.${me.uid}': me.photoURL,
+        });
+      }
+    }
+    final fresh = await ref.get();
+    return ConversationModel.fromFirestore(fresh);
+  }
+
   Stream<List<ConversationModel>> conversationsStream(String uid) => _chats
       .where('participants', arrayContains: uid)
       .orderBy('lastMessageAt', descending: true)

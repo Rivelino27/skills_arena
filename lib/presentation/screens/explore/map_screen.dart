@@ -177,7 +177,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   void _reverseGeocode(LatLng pos) {
     _revGeoDebounce?.cancel();
-    _revGeoDebounce = Timer(const Duration(milliseconds: 600), () async {
+    _revGeoDebounce = Timer(const Duration(seconds: 2), () async {
       if (!mounted) return;
       setState(() => _reverseGeocoding = true);
       try {
@@ -748,7 +748,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _pinAddress = null;
     });
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await AppNavigator.pushWithoutNavBar<bool>(
+    final ok = await AppNavigator.pushWithNavBar<bool>(
       context,
       AddVenueScreen(
         userLat: _pinPosition.latitude,
@@ -865,7 +865,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       child: FilledButton.icon(
                         onPressed: () {
                           Navigator.of(ctx).pop();
-                          AppNavigator.pushWithoutNavBar(
+                          AppNavigator.pushWithNavBar(
                             context,
                             VenueDetailScreen(
                               venue: v,
