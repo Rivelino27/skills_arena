@@ -89,12 +89,15 @@ class PostRepository {
 
   // ─── Comentários ──────────────────────────────────────────────────────────
 
-  Stream<List<CommentModel>> commentsStream(String postId) => _posts
-      .doc(postId)
-      .collection('comments')
-      .orderBy('createdAt', descending: false)
-      .snapshots()
-      .map((s) => s.docs.map(CommentModel.fromFirestore).toList());
+  Stream<List<CommentModel>> commentsStream(String postId,
+          {int limit = 200}) =>
+      _posts
+          .doc(postId)
+          .collection('comments')
+          .orderBy('createdAt', descending: false)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(CommentModel.fromFirestore).toList());
 
   Future<Either<AppFailure, Unit>> addComment({
     required String postId,

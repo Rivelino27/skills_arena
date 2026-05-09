@@ -88,18 +88,27 @@ class ChatRepository {
     return ConversationModel.fromFirestore(fresh);
   }
 
-  Stream<List<ConversationModel>> conversationsStream(String uid) => _chats
-      .where('participants', arrayContains: uid)
-      .orderBy('lastMessageAt', descending: true)
-      .snapshots()
-      .map((s) => s.docs.map(ConversationModel.fromFirestore).toList());
+  Stream<List<ConversationModel>> conversationsStream(String uid,
+          {int limit = 100}) =>
+      _chats
+          .where('participants', arrayContains: uid)
+          .orderBy('lastMessageAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(ConversationModel.fromFirestore).toList());
 
-  Stream<List<MessageModel>> messagesStream(String chatId) => _chats
-      .doc(chatId)
-      .collection('messages')
-      .orderBy('createdAt', descending: false)
-      .snapshots()
-      .map((s) => s.docs.map(MessageModel.fromFirestore).toList());
+  /// Last [limit] messages, in chronological order. Fetched newest-first
+  /// then reversed so the newest stays at the bottom of the chat.
+  Stream<List<MessageModel>> messagesStream(String chatId, {int limit = 200}) =>
+      _chats
+          .doc(chatId)
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.reversed
+              .map(MessageModel.fromFirestore)
+              .toList());
 
   /// Throws an exception when one of the users blocked the other.
   Future<ConversationModel> getOrCreateConversation({

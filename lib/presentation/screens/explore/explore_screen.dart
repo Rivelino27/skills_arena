@@ -12,6 +12,7 @@ import '../../providers/user_provider.dart';
 import '../profile/edit_address_screen.dart';
 import '../profile/search_users_screen.dart';
 import 'find_players_screen.dart';
+import 'find_users_screen.dart';
 import 'find_venues_screen.dart';
 import 'map_screen.dart';
 
@@ -151,8 +152,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _QuickTile(
-                    icon: Icons.people_rounded,
-                    label: 'Jogadores',
+                    icon: Icons.sports_score_rounded,
+                    label: 'Querem jogar',
                     count: players.length,
                     color: cs.tertiary,
                     onTap: () => AppNavigator.pushWithNavBar(
@@ -165,6 +166,23 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _QuickTile(
+              icon: Icons.people_rounded,
+              label: 'Buscar usuários',
+              count: null,
+              color: cs.secondary,
+              onTap: () => AppNavigator.pushWithNavBar(
+                context,
+                FindUsersScreen(
+                  userLat: me?.effectiveLat,
+                  userLng: me?.effectiveLng,
+                ),
+              ),
             ),
           ),
         ],
@@ -796,7 +814,7 @@ class _StatChip extends StatelessWidget {
 class _QuickTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  final int count;
+  final int? count;
   final Color color;
   final VoidCallback onTap;
 
@@ -822,11 +840,12 @@ class _QuickTile extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 28),
               const SizedBox(height: 8),
-              Text(
-                '$count',
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
+              if (count != null)
+                Text(
+                  '$count',
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
               Text(
                 label,
                 style: theme.textTheme.bodySmall?.copyWith(

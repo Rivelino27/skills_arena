@@ -28,8 +28,9 @@ class SportsRepository {
 
   // ─── Quadras ───────────────────────────────────────────────────────────────
 
-  Stream<List<SportsVenueModel>> venuesStream() => _venues
+  Stream<List<SportsVenueModel>> venuesStream({int limit = 200}) => _venues
       .orderBy('createdAt', descending: true)
+      .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(SportsVenueModel.fromFirestore).toList());
 
@@ -67,10 +68,13 @@ class SportsRepository {
 
   // ─── Disponibilidade de Jogadores ──────────────────────────────────────────
 
-  Stream<List<PlayerAvailabilityModel>> availabilityStream() => _availability
-      .where('expiresAt', isGreaterThan: Timestamp.now())
-      .snapshots()
-      .map((s) => s.docs.map(PlayerAvailabilityModel.fromFirestore).toList());
+  Stream<List<PlayerAvailabilityModel>> availabilityStream({int limit = 200}) =>
+      _availability
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .limit(limit)
+          .snapshots()
+          .map((s) =>
+              s.docs.map(PlayerAvailabilityModel.fromFirestore).toList());
 
   Future<Either<AppFailure, Unit>> markAvailability({
     required String sport,

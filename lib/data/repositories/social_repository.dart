@@ -92,9 +92,10 @@ class SocialRepository {
   }
 
   /// Stream of users who opted in to `visibleOnMap = true`.
-  Stream<List<UserModel>> visibleUsersStream() => _db
+  Stream<List<UserModel>> visibleUsersStream({int limit = 300}) => _db
       .collection('users')
       .where('visibleOnMap', isEqualTo: true)
+      .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(UserModel.fromFirestore).toList());
 }

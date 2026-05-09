@@ -44,6 +44,13 @@ class CustomBackButton extends StatelessWidget {
   }
 
   void _showMenu(BuildContext context) {
+    // Capture the navigator that owns this screen BEFORE pushing the modal.
+    // The modal is on the root navigator overlay; trying to pop using
+    // `context` after the modal closes can resolve to the wrong navigator
+    // (or be raced by the modal's own dismissal animation). Capturing here
+    // ensures the back action targets the screen, not the modal.
+    final screenNavigator = Navigator.of(context);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -73,7 +80,9 @@ class CustomBackButton extends StatelessWidget {
               subtitle: const Text('Retornar à tela anterior'),
               onTap: () {
                 Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
+                if (screenNavigator.canPop()) {
+                  screenNavigator.pop();
+                }
               },
             ),
             for (final option in options)
