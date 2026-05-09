@@ -1,0 +1,73 @@
+name: skills_arena
+description: Skills Arena - Flutter + Firebase
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.0
+  cloud_firestore: ^4.15.0
+  firebase_storage: ^11.6.0
+  firebase_messaging: ^14.7.20
+  flutter_local_notifications: ^17.2.4
+  google_sign_in: ^6.2.1
+
+  # Estado
+  flutter_riverpod: ^2.5.1
+
+  # Roteamento
+  go_router: ^17.2.3
+
+  # Utilitarios
+  dartz: ^0.10.1
+  equatable: ^2.0.5
+
+  # UI
+  cupertino_icons: ^1.0.6
+  cached_network_image: ^3.3.1
+  image_picker: ^1.0.7
+
+  # Armazenamento local
+  shared_preferences: ^2.2.3
+
+  # Mapa e localizacao
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.0
+  geolocator: ^12.0.0
+  permission_handler: ^11.3.1
+
+  # URLs e compartilhamento
+  url_launcher: ^6.2.0
+  share_plus: ^9.0.0
+  flutter_launcher_icons: ^0.14.4
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+# para colocar o icone do app, imagem quadrada, usar o comando: dart run flutter_launcher_icons:generate e para trocar icone usar o dart run flutter_launcher_icons:generate -o -- depois para aplicar flutter pub run flutter_launcher_icons
+# se gera ro arquivo flutter_launcher_icones.yaml, pode ser usado para configurar o icone do app, exemplo:
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#000000"   # ou cor desejada
+  adaptive_icon_foreground: "assets/icon/icon.png" # para o icone preenchido, ou pode ser uma imagem transparente
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icon/

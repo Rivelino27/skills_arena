@@ -1,0 +1,536 @@
+Falta arrumar / incluir:
+
+Em home as vezes em tocar no usuario do post, não abre a pagina do user e só clicando mais uma vez abre.
+
+Em explorar no acesso rapido mostrar a listagem de quadras e jogadores direto ao clicar nela, e clicando na quadra da lista abrir o local no mapa, e no user a mensagem.
+Assim como os icones do mapa de jogadores e quadras, ao clicar nele e aparecer a quadra clicando na quadra o mapa levar até a quadra.
+
+Cada user deve poder colocar seu endereço atual assim, se ele falar que quer jogar hoje aparece o endereço dele no mapa, mas sempre aparecer ele na listagem se ele estiver dentro do raio de pesquisa.
+Minha duvida é, não seria melhor o user ver o endereço fixo dos outros users no mapa? pois se ver a localização em tempo real de todos gera muito processamento e consumo de dados né?
+vamos fazer o seguinte, em uma conversa é possivel ver a locaalização real da pessoa que esta conversando se ele autorizaar e deve aparecer no chat o botão do maparaa para um ver onde o outro estaa no mapa.
+
+Além de ver quais pessoas querem jogar na região no raio de X km,ao aabrir umaa quadra o user pode marcar que ele vai jogar na quadra / local em questão e que horario ele vai jogar e sair (padrão de dauas horas, mas ele pode editaar o tempo) 
+dai outro user pode abrir a quadra e vber que outros users marcaraam presença e ele pode marcar sua presença paraa jogar no mesmo horario que os outros users também.
+Cada quadra / local ao cadastrar deve ser classificado como particular ou publico, cada quadra / local pode ter seu status mudado para cheio, vazio, poucas pessoas taambém e mostrar o dia e hora que foi aatualizado.
+
+Colocar notificação de mensagens, até na barra de navegação no icone chat, quando chegar mensagens novas.
+
+
+Arrume:
+
+Ao adicionar quadra ou local novo ao mover o pin deve aparecer em baixo quaal é o endereço rua, cep que o pin esta para salvar.
+Ao apertar em pesquisar na lupaa quqndo estamos adicionando o local do esporte, a barra com o form de busca para digitar fica atras de mova o mapa para posicionaar o pin.
+
+
+<<_______________ Abaixo já foi resolvido (ignorar):
+
+Os users devem ter a opção na aba explorar de colocar seu status atual de fora pratica, disponivel para jogar hoje, 
+nas proximas 17h, raio de busca personalizado 5 km 7km 10 km etc, passando 24h esse status quero jogar é desativado, mas mesmo
+ele sendo desativado o user pode ativar ou desativar sua visualização na região, assim tera dois tipos de busca jogar hoje
+das pessoas que ativaram que querem jogar e os jogadores encontrados na região.
+
+No mapa ir aparecendo um botão flutuante a direita com o numero de jogadores encontrados no raio de busca e outro botão 
+com o numero de quadras encontradas, e ao clicar neles aparecer a listagem de jogadores encontrados na area e poder falar com eles e
+selecionar os users para criar um grupo e falar com eles.
+
+O chat deve ter verificação de visualizado de msgs igual a setinha do whatsapp e reagir com emogis na MSG . 👍🤣🆗✅❌✔✌🤝🏆👎
+
+Users devem bloquear / desbloquear usuarios.
+
+não esta funcionando comentarios nas postagens:
+W/Firestore(11362): (24.11.0) [Firestore]: Write failed at posts/XOU4xHhvw9cjHFh7h7qW: Status{code=PERMISSION_DENIED, description=Missing or insufficient permissions., cause=null}
+
+
+
+
+
+
+falta poder comentar em postagens, mandar mensagens para a pessoas da postagem clicando nela e vendo o perfil dela.
+A pessoa pode postar links do tik tok também nas postagens.
+no modo de inserir local de esporte apareer um pin que a pessoa vai movendo ele até o local no mapa e ao tocar novamante nele ou no botão + que deve aparecer ela inlui olocal do esporte
+deve ser possivel achar os users or e-mail ou nome de usuario, mas cada user pode desabilitar ou não a busca por email.
+
+colocar um botão na aba perfil para ir em uma tela com botões para ir em um tela teste sem exibir a bottom bar, exibndo a bottom bar e uma tela com voltr personalizado, 
+só nesta tela o voltar deve ser personalizado.
+
+Ativer historicode navegação de abas, sem voltar dus vezes para a mesma aba e a ultima aba antes de sair do app deve sempre ser a home.
+esta muito lento para loggar agora, e da erro de api excption ao tentar logar, arrume, tava funcionnado bem o histopricod e navegação botom mas apertando em muitas abas saiu do app, tem que sair sempre na home após zerar o historico
+>>
+Arrume, esta com o bug de voltar entre abas bottom nav bar com historico, o voltar entre abs não funciona ao paertar voltar no android, mas
+só funciona no app quando vamos na aba chat, entramos em nova conversa e voltamos ai sim, funciona em todo app o voltar com histrico no
+bottom navigation bar.
+
+Erro ao abrir conversa: (cloud_firestoreipermission•
+deni±l The call-r doe-s not hawE permission to
+execute the spetified operation,
+W/Firestore(15913): (24.11.0) [Firestore]: Listen for Query(target=Query(chats/lzcZtIFJ17XI2mn3PiQ8coLp6YC3_ytBGjOtFeecgwQEddSFfnN2VdbB3 order by __name__);limitType=LIMIT_TO_FIRST) failed: Status{code=PERMISSION_DENIED, description=Missing or insufficient permissions., cause=null}
+
+colocar lista suspensa de endereçço ao digitar ele, ir completando endereço ao digitar ele.
+
+mudou nada, por favor veja porque neste projeto meu o voltar com historico de navegação nas telas da botom appbar persistente funciona perfeitamente e traga para meu código, incluindo o estilo bottom nav bar também deste projeto:
+https://github.com/Rivelino27/nav27
+
+ao clicar em voltsar em uam tela pai da bottom nav bar ao invés de ir para a bottom nav anteriro, sai do app.
+
+sera que é algo na config dele? no gradle? abaixo esta funcionando tuedo neste projeto, o voltar em uma aba bottom vai para outra perfeitamente ao inv´pes de sair do app
+
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  Future<bool> _isLoggedIn() async {
+    String? logado = await _secureStorage.read(key: "logado");
+    return logado == "true";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false, // Esta linha remove a faixa
+      title: 'Flutter Bottom Nav with Nested Navigation',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color.fromARGB(255, 19, 12, 37),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color.fromARGB(255, 23, 38, 112),
+          elevation: 0,
+          centerTitle: true,
+        ),
+        primaryColor: Colors.teal,
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color.fromARGB(255, 61, 55, 151),
+            foregroundColor: const Color.fromARGB(255, 255, 255, 255),
+          ),
+        ),
+      ),
+      home: FutureBuilder<bool>(
+        future: _isLoggedIn(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          } else if (snapshot.hasData && snapshot.data!) {
+            return const MyHomePage();
+          } else {
+            return const LoginPageSS();
+          }
+        },
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  int _currentIndex = 0;
+  final List<int> _tabHistory = [0];
+
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
+
+  double _dragStartX = 0.0;
+  double _dragDeltaX = 0.0;
+
+  final ValueNotifier<int> _counterNotifier = ValueNotifier(0);
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstLaunch();
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool? isFirst = prefs.getBool('first_launch');
+    if (isFirst == null || isFirst) {
+      await _requestPermissions();
+      await prefs.setBool('first_launch', false);
+    }
+  }
+
+  Future<int> _getAndroidSdkVersion() async {
+    if (Platform.isAndroid) {
+      try {
+        final int version = await MethodChannel('com.example.nav27/sdk_version').invokeMethod('getSdkVersion');
+        return version;
+      } catch (e) {
+        print('Erro ao obter SDK version: $e');
+        return 0;
+      }
+    }
+    return 0;
+  }
+
+  Future<void> _requestPermissions() async {
+    // Solicitar permissão de armazenamento com checagem de versão Android
+    Permission storagePermission;
+    if (Platform.isAndroid) {
+      int sdkVersion = await _getAndroidSdkVersion();
+      if (sdkVersion >= 30) {
+        storagePermission = Permission.manageExternalStorage;
+      } else {
+        storagePermission = Permission.storage;
+      }
+    } else {
+      storagePermission = Permission.storage; // Para iOS ou outros, adapte se necessário
+    }
+
+    var storageStatus = await storagePermission.request();
+    if (storageStatus.isDenied) {
+      // Mostrar diálogo explicando a necessidade
+      if (await storagePermission.shouldShowRequestRationale) {
+        // Explicar e pedir novamente
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Permissão de Armazenamento Necessária'),
+              content: const Text('Este app precisa de acesso ao armazenamento para ler e salvar arquivos.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await storagePermission.request();
+                  },
+                  child: const Text('Permitir'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        // Redirecionar para configurações
+        openAppSettings();
+      }
+    }
+
+    // Solicitar permissão de localização
+    var locationStatus = await Permission.location.request();
+    if (locationStatus.isDenied) {
+      // Similar: mostrar explicação
+    }
+
+    // Solicitar permissão de notificações
+    var notificationStatus = await Permission.notification.request();
+    if (notificationStatus.isDenied) {
+      // Similar: mostrar explicação
+    }
+
+    // Nota: Para Android 11+, use MANAGE_EXTERNAL_STORAGE para acesso completo.
+    // Adicione <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/> no manifest.
+    // Para exportar arquivos, use Storage Access Framework (SAF) se necessário.
+  }
+
+  void _removeConsecutiveDuplicates() {
+    for (int i = _tabHistory.length - 1; i > 0; i--) {
+      if (_tabHistory[i] == _tabHistory[i - 1]) {
+        _tabHistory.removeAt(i);
+      }
+    }
+  }
+
+  void _onTabTapped(int index) {
+    if (index == _currentIndex) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    } else {
+      setState(() {
+        if (_tabHistory.last != index) {
+          if (_tabHistory.contains(index) && index != 0) {
+            _tabHistory.remove(index);
+          }
+          _tabHistory.add(index);
+          _removeConsecutiveDuplicates();
+        }
+        _currentIndex = index;
+      });
+    }
+  }
+
+  void _onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) return;
+
+    final currentNavigator = _navigatorKeys[_currentIndex].currentState;
+    if (currentNavigator?.canPop() ?? false) {
+      currentNavigator?.pop();
+    } else if (_tabHistory.length > 1) {
+      setState(() {
+        _tabHistory.removeLast();
+        _removeConsecutiveDuplicates();
+        _currentIndex = _tabHistory.last;
+      });
+    } else {
+      SystemNavigator.pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: List.generate(4, (index) => _buildNavigator(index)),
+        ),
+        bottomNavigationBar: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            _dragStartX = details.globalPosition.dx;
+            _dragDeltaX = 0.0;
+          },
+          onHorizontalDragUpdate: (details) {
+            _dragDeltaX = details.globalPosition.dx - _dragStartX;
+          },
+          onHorizontalDragEnd: (details) {
+            if (_dragDeltaX.abs() > 50) { // Limite de 50 pixels para detectar swipe
+              int newIndex;
+              if (_dragDeltaX > 0) {
+                // Swipe para a direita: aba anterior ou circular para a última
+                newIndex = _currentIndex > 0 ? _currentIndex - 1 : 3;
+              } else {
+                // Swipe para a esquerda: aba próxima ou circular para a primeira
+                newIndex = _currentIndex < 3 ? _currentIndex + 1 : 0;
+              }
+              _onTabTapped(newIndex);
+            }
+          },
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: _onTabTapped,
+            selectedItemColor: Colors.teal,
+            unselectedItemColor: Colors.white,
+            backgroundColor: Colors.black,
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+              BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigator(int index) {
+    Widget initialScreen;
+    switch (index) {
+      case 0:
+        initialScreen = const HomeScreen();
+        break;
+      case 1:
+        initialScreen = const SearchScreen();
+        break;
+      case 2:
+        initialScreen = ProfileScreen(counterNotifier: _counterNotifier);
+        break;
+      case 3:
+        initialScreen = SettingsScreen(counterNotifier: _counterNotifier);
+        break;
+      default:
+        initialScreen = const HomeScreen();
+    }
+    return Navigator(
+      key: _navigatorKeys[index],
+      onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => initialScreen),
+    );
+  }
+} 
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
+}
+
+
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.nav27"
+
+    // 🔹 Flutter 3.41 exige compileSdk 36
+    compileSdk = 36
+
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true  // Corrigido para isCoreLibraryDesugaringEnabled
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)  // Migrado para o DSL recomendado, evite deprecação
+        }
+    }
+
+    defaultConfig {
+        applicationId = "com.example.nav27"
+
+        // 🔹 Pode manter compatibilidade ampla
+        minSdk = flutter.minSdkVersion
+
+        // 🔹 AQUI você define a API que você quer programar
+        targetSdk = 35
+
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    // ... outras dependências existentes
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")  // Atualize para 2.1.2 (ou teste 2.1.4 se disponível)
+}
+
+/* 
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.nav27"
+
+    // 🔹 Flutter 3.41 exige compileSdk 36
+    compileSdk = 36
+
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+       
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        applicationId = "com.example.nav27"
+
+        // 🔹 Pode manter compatibilidade ampla
+        minSdk = flutter.minSdkVersion
+
+        // 🔹 AQUI você define a API que você quer programar
+        targetSdk = 35
+
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+}
+
+flutter {
+    source = "../.."
+} */
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/> <!-- Adicionado para Android 11+ -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />  <!-- Para agendamentos exatos -->
+    <application
+        android:label="nav27"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

@@ -1,0 +1,26 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "skills-arena-c2c71",
+          "appId": "1:492117491640:android:3a0e63d78f085e34c3594d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "skills-arena-c2c71",
+          "configurations": {
+            "android": "1:492117491640:android:3a0e63d78f085e34c3594d",
+            "ios": "1:492117491640:ios:f524e28eed161514c3594d",
+            "web": "1:492117491640:web:4e5c92d5980015bec3594d"
+          }
+        }
+      }
+    }
+  }
+}
