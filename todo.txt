@@ -1,5 +1,10 @@
 Falta arrumar / incluir:
 
+Voltar entre telas das abas bottom nav bar de uma para outra sem destruir o historico de navegação bottom.
+
+
+>> feito, ignorara abaixo:
+
 Em home as vezes em tocar no usuario do post, não abre a pagina do user e só clicando mais uma vez abre.
 
 Em explorar no acesso rapido mostrar a listagem de quadras e jogadores direto ao clicar nela, e clicando na quadra da lista abrir o local no mapa, e no user a mensagem.
