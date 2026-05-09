@@ -146,6 +146,36 @@ class ChatRepository {
     await batch.commit();
   }
 
+  /// Sends a one-shot location message (lat/lng) into the conversation.
+  Future<void> sendLocationMessage({
+    required String chatId,
+    required double lat,
+    required double lng,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser!;
+    final now = DateTime.now();
+    final msg = MessageModel(
+      id: '',
+      senderId: user.uid,
+      senderName: user.displayName ?? 'Eu',
+      text: '📍 Localização',
+      type: MessageType.location,
+      lat: lat,
+      lng: lng,
+      createdAt: now,
+    );
+    final batch = _db.batch();
+    final msgRef = _chats.doc(chatId).collection('messages').doc();
+    batch.set(msgRef, msg.toMap());
+    batch.update(_chats.doc(chatId), {
+      'lastMessage': '📍 Localização',
+      'lastMessageAt': Timestamp.fromDate(now),
+      'lastSenderId': user.uid,
+      'lastReadAt.${user.uid}': Timestamp.fromDate(now),
+    });
+    await batch.commit();
+  }
+
   /// Marks the conversation as read for the current user (now).
   Future<void> markAsRead(String chatId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;

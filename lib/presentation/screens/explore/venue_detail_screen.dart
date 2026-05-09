@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
@@ -182,6 +183,10 @@ class _InfoTab extends ConsumerWidget {
 
         // ── Quem vai jogar lá ─────────────────────────────────────────
         _AttendanceSection(venueId: v.id),
+        const SizedBox(height: 8),
+
+        // ── Como chegar (Google Maps / Uber) ──────────────────────────
+        _NavigationSection(venue: v),
         const SizedBox(height: 8),
 
         _InfoTile(
@@ -1241,6 +1246,89 @@ class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
             label: const Text('Confirmar presença'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Como chegar (apps externos de navegação) ───────────────────────────────
+
+class _NavigationSection extends StatelessWidget {
+  final SportsVenueModel venue;
+  const _NavigationSection({required this.venue});
+
+  Future<void> _openGoogleMaps(BuildContext context) async {
+    final uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível abrir o Google Maps.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openUber(BuildContext context) async {
+    final name = Uri.encodeComponent(venue.name);
+    // Tries the Uber app first, falls back to the mobile web URL.
+    final appUri = Uri.parse(
+        'uber://?action=setPickup&pickup=my_location&dropoff[latitude]=${venue.lat}&dropoff[longitude]=${venue.lng}&dropoff[nickname]=$name');
+    final webUri = Uri.parse(
+        'https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${venue.lat}&dropoff[longitude]=${venue.lng}&dropoff[nickname]=$name');
+    final ok = await launchUrl(appUri, mode: LaunchMode.externalApplication)
+        .catchError((_) => false);
+    if (ok) return;
+    final web =
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    if (!web && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o Uber.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.alt_route_rounded, color: cs.primary),
+                const SizedBox(width: 10),
+                Text('Como chegar',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openGoogleMaps(context),
+                    icon: const Icon(Icons.map_rounded),
+                    label: const Text('Google Maps'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openUber(context),
+                    icon: const Icon(Icons.local_taxi_rounded),
+                    label: const Text('Uber'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

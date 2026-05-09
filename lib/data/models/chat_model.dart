@@ -100,11 +100,16 @@ class ConversationModel {
       };
 }
 
+enum MessageType { text, location }
+
 class MessageModel {
   final String id;
   final String senderId;
   final String senderName;
   final String text;
+  final MessageType type;
+  final double? lat;
+  final double? lng;
   final DateTime createdAt;
 
   const MessageModel({
@@ -112,16 +117,23 @@ class MessageModel {
     required this.senderId,
     required this.senderName,
     required this.text,
+    this.type = MessageType.text,
+    this.lat,
+    this.lng,
     required this.createdAt,
   });
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
+    final rawType = d['type'] as String?;
     return MessageModel(
       id: doc.id,
       senderId: d['senderId'] as String,
       senderName: d['senderName'] as String,
       text: d['text'] as String,
+      type: rawType == 'location' ? MessageType.location : MessageType.text,
+      lat: (d['lat'] as num?)?.toDouble(),
+      lng: (d['lng'] as num?)?.toDouble(),
       createdAt: (d['createdAt'] as Timestamp).toDate(),
     );
   }
@@ -130,6 +142,9 @@ class MessageModel {
         'senderId': senderId,
         'senderName': senderName,
         'text': text,
+        'type': type.name,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 }
