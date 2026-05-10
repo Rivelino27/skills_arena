@@ -25,6 +25,13 @@ class UserBadge extends StatelessWidget {
             size: size, color: Colors.amber.shade600),
       );
     }
+    if (user.isVerified) {
+      return Tooltip(
+        message: 'Verificado',
+        child: Icon(Icons.verified_rounded,
+            size: size, color: Colors.blue.shade400),
+      );
+    }
     return const SizedBox.shrink();
   }
 }

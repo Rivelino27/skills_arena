@@ -42,6 +42,62 @@ class ChatRepository {
     return 'venue_${venueId}_${date}_$hour';
   }
 
+  /// Deterministic chat ID for a venue's whole-day group chat.
+  /// Same shape as the slot ID but without the hour suffix, so a new day
+  /// = a fresh chat (no message buildup).
+  static String buildVenueDayChatId(String venueId, DateTime day) {
+    final date = '${day.year}'
+        '${day.month.toString().padLeft(2, '0')}'
+        '${day.day.toString().padLeft(2, '0')}';
+    return 'venue_${venueId}_${date}_day';
+  }
+
+  /// Whole-day venue chat. Anyone signed in can join. Messages reset
+  /// daily because the chat ID rolls over at midnight.
+  Future<ConversationModel> getOrCreateVenueDayChat({
+    required String venueId,
+    required String venueName,
+    required DateTime day,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser!;
+    final id = buildVenueDayChatId(venueId, day);
+    final ref = _chats.doc(id);
+    final doc = await ref.get();
+
+    final dd = day.day.toString().padLeft(2, '0');
+    final mm = day.month.toString().padLeft(2, '0');
+    final groupName = '$venueName • $dd/$mm (dia)';
+
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [me.uid],
+        'participantNames': {me.uid: me.displayName ?? 'Eu'},
+        'participantPhotos': {me.uid: me.photoURL},
+        'lastMessage': null,
+        'lastMessageAt': Timestamp.now(),
+        'isGroup': true,
+        // Reuse the same Firestore-rule branch as slot groups so any
+        // signed-in user can join.
+        'isVenueSlotGroup': true,
+        'venueId': venueId,
+        'groupName': groupName,
+      });
+    } else {
+      final data = doc.data()!;
+      final participants =
+          List<String>.from(data['participants'] as List? ?? []);
+      if (!participants.contains(me.uid)) {
+        await ref.update({
+          'participants': FieldValue.arrayUnion([me.uid]),
+          'participantNames.${me.uid}': me.displayName ?? 'Eu',
+          'participantPhotos.${me.uid}': me.photoURL,
+        });
+      }
+    }
+    final fresh = await ref.get();
+    return ConversationModel.fromFirestore(fresh);
+  }
+
   /// Gets or joins the venue-slot group chat. Creates with current user
   /// if it doesn't exist; otherwise adds current user to participants.
   /// Anyone signed-in can join (Firestore rules permit isVenueSlotGroup chats).

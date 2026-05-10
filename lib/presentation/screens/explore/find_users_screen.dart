@@ -10,7 +10,7 @@ import '../../providers/sports_provider.dart';
 import '../../widgets/user_badge.dart';
 import '../profile/user_profile_screen.dart';
 
-enum _UsersFilter { all, premium, wantingToday }
+enum _UsersFilter { all, verified, premium, topRated, wantingToday }
 
 /// Busca unificada de usuários: todos, premium, ou querem jogar hoje.
 /// Ordenado por distância quando o usuário tem coordenadas.
@@ -81,8 +81,18 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
           switch (_filter) {
             case _UsersFilter.all:
               break;
+            case _UsersFilter.verified:
+              list = list
+                  .where((u) => u.isVerified || u.isAdmin)
+                  .toList();
+              break;
             case _UsersFilter.premium:
               list = list.where((u) => u.isPremium || u.isAdmin).toList();
+              break;
+            case _UsersFilter.topRated:
+              list = list
+                  .where((u) => (u.rating ?? 0.0) >= 4.5)
+                  .toList();
               break;
             case _UsersFilter.wantingToday:
               list = list
@@ -173,12 +183,38 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
+                        avatar: Icon(Icons.verified_rounded,
+                            size: 16, color: Colors.blue.shade400),
+                        label: const Text('Verificados'),
+                        selected: _filter == _UsersFilter.verified,
+                        onSelected: (_) => setState(() {
+                          _filter = _UsersFilter.verified;
+                          _visibleCount = _pageSize;
+                        }),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
                         avatar: Icon(Icons.workspace_premium_rounded,
                             size: 16, color: Colors.amber.shade700),
                         label: const Text('Premium'),
                         selected: _filter == _UsersFilter.premium,
                         onSelected: (_) => setState(() {
                           _filter = _UsersFilter.premium;
+                          _visibleCount = _pageSize;
+                        }),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        avatar: const Icon(Icons.star_rounded,
+                            size: 16, color: Colors.amber),
+                        label: const Text('Nota 4,5+'),
+                        selected: _filter == _UsersFilter.topRated,
+                        onSelected: (_) => setState(() {
+                          _filter = _UsersFilter.topRated;
                           _visibleCount = _pageSize;
                         }),
                       ),
@@ -365,6 +401,9 @@ class _UserTile extends StatelessWidget {
     final subtitleParts = <String>[];
     if (sportTodayLabel != null) {
       subtitleParts.add('🏟️ Quer jogar $sportTodayLabel');
+    }
+    if (user.rating != null) {
+      subtitleParts.add('⭐ ${user.rating!.toStringAsFixed(1)}');
     }
     if (distanceKm != null) {
       subtitleParts.add(GeoUtils.formatDistance(distanceKm!));

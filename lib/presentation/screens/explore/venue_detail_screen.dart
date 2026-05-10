@@ -14,6 +14,8 @@ import '../../../data/repositories/post_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/sports_provider.dart';
+import '../../providers/user_provider.dart';
+import '../../widgets/verified_badge.dart';
 import '../chat/conversation_screen.dart';
 
 class VenueDetailScreen extends ConsumerStatefulWidget {
@@ -56,14 +58,39 @@ class _VenueDetailScreenState extends ConsumerState<VenueDetailScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.venue.name,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(widget.venue.sport,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          ],
+        title: Consumer(
+          builder: (_, ref, __) {
+            // Watch live so the verified badge appears immediately after
+            // an admin flips the flag.
+            final live = ref
+                .watch(venuesStreamProvider)
+                .valueOrNull
+                ?.where((v) => v.id == widget.venue.id)
+                .firstOrNull ??
+                widget.venue;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(live.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                    if (live.isVerified) ...[
+                      const SizedBox(width: 6),
+                      const VerifiedBadge(size: 14, tooltip: 'Quadra verificada'),
+                    ],
+                  ],
+                ),
+                Text(live.sport,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            );
+          },
         ),
         bottom: TabBar(
           controller: _tabController,
@@ -176,12 +203,25 @@ class _InfoTab extends ConsumerWidget {
                     : cs.onSurface,
               ),
             ),
+            if (v.isVerified)
+              Chip(
+                avatar: Icon(Icons.verified_rounded,
+                    size: 16, color: Colors.blue.shade400),
+                label: const Text('Verificada'),
+                backgroundColor: Colors.blue.withValues(alpha: 0.12),
+              ),
           ],
         ),
+        // Admin-only toggle.
+        _AdminVerifyToggle(venue: v),
         const SizedBox(height: 20),
 
         // ── Status atual da quadra ─────────────────────────────────────
         _OccupancySection(venue: v),
+        const SizedBox(height: 8),
+
+        // ── Chat geral do dia da quadra ───────────────────────────────
+        _DayChatSection(venue: v),
         const SizedBox(height: 8),
 
         // ── Quem vai jogar lá ─────────────────────────────────────────
@@ -1376,6 +1416,80 @@ class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
   }
 }
 
+// ─── Chat geral do dia da quadra ─────────────────────────────────────────
+//
+// Single chat per (venue, day). Anyone who opens this card joins. Messages
+// reset daily because the chat ID rolls over at midnight (the backend uses
+// `venue_<id>_<YYYYMMDD>_day` as the doc ID).
+
+class _DayChatSection extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _DayChatSection({required this.venue});
+
+  Future<void> _openDayChat(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateVenueDayChat(
+                venueId: venue.id,
+                venueName: venue.name,
+                day: DateTime.now(),
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Erro ao abrir chat do dia: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      color: cs.primaryContainer.withValues(alpha: 0.4),
+      child: InkWell(
+        onTap: () => _openDayChat(context, ref),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Icon(Icons.forum_rounded, color: cs.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chat do dia',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Conversa com todo mundo que vai jogar nessa quadra hoje. '
+                      'Mensagens resetam à meia-noite.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Jogadores na região (querem jogar perto desta quadra) ────────────────
 
 class _NearbyPlayersSection extends ConsumerWidget {
@@ -1503,6 +1617,73 @@ class _NearbyPlayersSection extends ConsumerWidget {
                 ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Admin: alternar selo de verificada ─────────────────────────────────────
+
+class _AdminVerifyToggle extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _AdminVerifyToggle({required this.venue});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    if (me == null || !me.isAdmin) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        color: cs.tertiaryContainer.withValues(alpha: 0.4),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Icon(Icons.shield_moon_rounded, color: cs.tertiary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Admin',
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      venue.isVerified
+                          ? 'Quadra está verificada'
+                          : 'Quadra ainda não verificada',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: venue.isVerified,
+                onChanged: (v) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final res = await ref
+                      .read(sportsRepositoryProvider)
+                      .setVenueVerified(
+                          venueId: venue.id, verified: v);
+                  res.fold(
+                    (f) => messenger.showSnackBar(
+                        SnackBar(content: Text(f.message))),
+                    (_) => messenger.showSnackBar(
+                      SnackBar(
+                          content: Text(v
+                              ? 'Quadra marcada como verificada.'
+                              : 'Verificação removida.')),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

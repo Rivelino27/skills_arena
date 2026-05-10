@@ -11,6 +11,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    /// True when the requesting user has `isAdmin: true` in their user
+    /// document. Admins can flip the `isVerified` flag on venues / users.
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.get('isAdmin', false) == true;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────
     // The user owns their own document, BUT:
     //   - `isAdmin` and `isPremium` cannot be set by the client.
@@ -21,12 +30,25 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isMe(uid)
         && request.resource.data.get('isAdmin', false) == false
-        && request.resource.data.get('isPremium', false) == false;
-      allow update: if isMe(uid)
+        && request.resource.data.get('isPremium', false) == false
+        && request.resource.data.get('isVerified', false) == false;
+      // The user can update their own document, but cannot promote
+      // themselves to admin/premium/verified — those flags must stay
+      // unchanged unless an admin is doing the write.
+      allow update: if (
+        isMe(uid)
         && request.resource.data.get('isAdmin', false)
             == resource.data.get('isAdmin', false)
         && request.resource.data.get('isPremium', false)
-            == resource.data.get('isPremium', false);
+            == resource.data.get('isPremium', false)
+        && request.resource.data.get('isVerified', false)
+            == resource.data.get('isVerified', false)
+      ) || (
+        // Admins can flip flags on any user.
+        isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isAdmin', 'isPremium', 'isVerified'])
+      );
       allow delete: if false;
     }
 
@@ -36,13 +58,28 @@ service cloud.firestore {
     // occupancyUpdatedAt, occupancyUpdatedBy). All other fields are author-only.
     match /sports_venues/{venueId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.addedBy == request.auth.uid;
+      // Creator cannot self-mark as verified.
+      allow create: if isSignedIn()
+        && request.resource.data.addedBy == request.auth.uid
+        && request.resource.data.get('isVerified', false) == false;
       allow update: if isSignedIn() && (
-        resource.data.addedBy == request.auth.uid
+        // Author can update most fields, but cannot flip `isVerified`.
+        (
+          resource.data.addedBy == request.auth.uid
+          && request.resource.data.get('isVerified', false)
+              == resource.data.get('isVerified', false)
+        )
+        // Anyone signed-in can patch occupancy fields.
         || (
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['occupancy', 'occupancyUpdatedAt', 'occupancyUpdatedBy'])
           && request.resource.data.occupancyUpdatedBy == request.auth.uid
+        )
+        // Only admins can flip the verified flag.
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isVerified', 'verifiedBy', 'verifiedAt'])
         )
       );
       allow delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;

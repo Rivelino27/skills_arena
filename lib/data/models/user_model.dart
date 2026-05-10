@@ -8,6 +8,14 @@ class UserModel {
   final String? photoUrl;
   final bool isPremium;
   final bool isAdmin;
+  /// Verified by an admin (separate from premium/admin). Used to filter
+  /// "Apenas verificados" in user search.
+  final bool isVerified;
+  /// Average user rating (0–5). `null` means "not rated yet".
+  /// Set externally — currently no in-app rating UI; promote/seed via
+  /// Firestore console or a future feedback flow.
+  final double? rating;
+  final int ratingCount;
   final bool searchableByEmail;
   final List<String> blockedUsers;
   final bool visibleOnMap;
@@ -27,6 +35,9 @@ class UserModel {
     this.photoUrl,
     this.isPremium = false,
     this.isAdmin = false,
+    this.isVerified = false,
+    this.rating,
+    this.ratingCount = 0,
     this.searchableByEmail = true,
     this.blockedUsers = const [],
     this.visibleOnMap = false,
@@ -53,6 +64,9 @@ class UserModel {
       photoUrl: data['photoUrl'] as String?,
       isPremium: data['isPremium'] as bool? ?? false,
       isAdmin: data['isAdmin'] as bool? ?? false,
+      isVerified: data['isVerified'] as bool? ?? false,
+      rating: (data['rating'] as num?)?.toDouble(),
+      ratingCount: (data['ratingCount'] as num?)?.toInt() ?? 0,
       searchableByEmail: data['searchableByEmail'] as bool? ?? true,
       blockedUsers: List<String>.from(data['blockedUsers'] as List? ?? []),
       visibleOnMap: data['visibleOnMap'] as bool? ?? false,
@@ -73,6 +87,9 @@ class UserModel {
         'photoUrl': photoUrl,
         'isPremium': isPremium,
         'isAdmin': isAdmin,
+        'isVerified': isVerified,
+        if (rating != null) 'rating': rating,
+        'ratingCount': ratingCount,
         'searchableByEmail': searchableByEmail,
         'blockedUsers': blockedUsers,
         'visibleOnMap': visibleOnMap,
@@ -94,6 +111,9 @@ class UserModel {
     String? photoUrl,
     bool? isPremium,
     bool? isAdmin,
+    bool? isVerified,
+    double? rating,
+    int? ratingCount,
     bool? searchableByEmail,
     List<String>? blockedUsers,
     bool? visibleOnMap,
@@ -111,6 +131,9 @@ class UserModel {
         photoUrl: photoUrl ?? this.photoUrl,
         isPremium: isPremium ?? this.isPremium,
         isAdmin: isAdmin ?? this.isAdmin,
+        isVerified: isVerified ?? this.isVerified,
+        rating: rating ?? this.rating,
+        ratingCount: ratingCount ?? this.ratingCount,
         searchableByEmail: searchableByEmail ?? this.searchableByEmail,
         blockedUsers: blockedUsers ?? this.blockedUsers,
         visibleOnMap: visibleOnMap ?? this.visibleOnMap,

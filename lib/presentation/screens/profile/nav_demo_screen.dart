@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:skills_arena/presentation/screens/home/home_screen.dart';
 
 import '../../../core/navigation/app_navigator.dart';
 import '../../providers/main_tab_provider.dart';
@@ -359,10 +360,8 @@ class _TestCustomBack extends ConsumerWidget {
               leading:
                   const CircleAvatar(child: Icon(Icons.home_rounded, size: 18)),
               title: const Text('Ir para Home'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _goToTab(context, ref, 0);
-              },
+              onTap: () => AppNavigator.pushWithNavBar(
+                      context, const HomeScreen())
             ),
             ListTile(
               leading: const CircleAvatar(

@@ -43,6 +43,30 @@ class SportsRepository {
     }
   }
 
+  /// Admin-only — flips the `isVerified` flag on a venue. Firestore
+  /// rules enforce that only an admin can write these fields, so the
+  /// promise will reject if a non-admin calls it.
+  Future<Either<AppFailure, Unit>> setVenueVerified({
+    required String venueId,
+    required bool verified,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      await _venues.doc(venueId).update({
+        'isVerified': verified,
+        'verifiedBy': verified ? user.uid : null,
+        'verifiedAt': verified ? Timestamp.now() : null,
+      });
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao alterar verificação da quadra.'));
+    }
+  }
+
   /// Any signed-in user can update the live occupancy + timestamp.
   /// Permission to write only the three fields is enforced by Firestore rules.
   Future<Either<AppFailure, Unit>> updateOccupancy({
