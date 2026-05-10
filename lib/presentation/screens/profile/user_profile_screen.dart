@@ -11,6 +11,7 @@ import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/social_repository.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/user_badge.dart';
 import '../chat/conversation_screen.dart';
 
 final _userByIdProvider = StreamProvider.family<UserModel?, String>((ref, uid) {
@@ -119,9 +120,19 @@ class _ProfileBody extends ConsumerWidget {
                 ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(name,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 6),
+                  UserBadge(user: user, size: 14),
+                ],
+              ),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(

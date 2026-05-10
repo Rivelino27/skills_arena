@@ -58,6 +58,11 @@ class SportsVenueModel {
   final VenueOccupancy occupancy;
   final DateTime? occupancyUpdatedAt;
   final String? occupancyUpdatedBy;
+  /// True when an admin reviewed and verified the venue. Shows a badge
+  /// in the UI and unlocks the "Verificadas" filter.
+  final bool isVerified;
+  final String? verifiedBy;
+  final DateTime? verifiedAt;
   final DateTime createdAt;
 
   const SportsVenueModel({
@@ -73,6 +78,9 @@ class SportsVenueModel {
     this.occupancy = VenueOccupancy.unknown,
     this.occupancyUpdatedAt,
     this.occupancyUpdatedBy,
+    this.isVerified = false,
+    this.verifiedBy,
+    this.verifiedAt,
     required this.createdAt,
   });
 
@@ -93,6 +101,11 @@ class SportsVenueModel {
           ? (data['occupancyUpdatedAt'] as Timestamp).toDate()
           : null,
       occupancyUpdatedBy: data['occupancyUpdatedBy'] as String?,
+      isVerified: data['isVerified'] as bool? ?? false,
+      verifiedBy: data['verifiedBy'] as String?,
+      verifiedAt: data['verifiedAt'] != null
+          ? (data['verifiedAt'] as Timestamp).toDate()
+          : null,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
   }
@@ -111,6 +124,9 @@ class SportsVenueModel {
             ? Timestamp.fromDate(occupancyUpdatedAt!)
             : null,
         'occupancyUpdatedBy': occupancyUpdatedBy,
+        'isVerified': isVerified,
+        if (verifiedBy != null) 'verifiedBy': verifiedBy,
+        if (verifiedAt != null) 'verifiedAt': Timestamp.fromDate(verifiedAt!),
         'createdAt': Timestamp.fromDate(createdAt),
       };
 }

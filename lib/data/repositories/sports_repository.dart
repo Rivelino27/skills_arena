@@ -28,8 +28,9 @@ class SportsRepository {
 
   // ─── Quadras ───────────────────────────────────────────────────────────────
 
-  Stream<List<SportsVenueModel>> venuesStream() => _venues
+  Stream<List<SportsVenueModel>> venuesStream({int limit = 200}) => _venues
       .orderBy('createdAt', descending: true)
+      .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(SportsVenueModel.fromFirestore).toList());
 
@@ -39,6 +40,30 @@ class SportsRepository {
       return const Right(unit);
     } catch (e) {
       return const Left(ServerFailure(message: 'Erro ao adicionar quadra.'));
+    }
+  }
+
+  /// Admin-only — flips the `isVerified` flag on a venue. Firestore
+  /// rules enforce that only an admin can write these fields, so the
+  /// promise will reject if a non-admin calls it.
+  Future<Either<AppFailure, Unit>> setVenueVerified({
+    required String venueId,
+    required bool verified,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      await _venues.doc(venueId).update({
+        'isVerified': verified,
+        'verifiedBy': verified ? user.uid : null,
+        'verifiedAt': verified ? Timestamp.now() : null,
+      });
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao alterar verificação da quadra.'));
     }
   }
 
@@ -67,10 +92,13 @@ class SportsRepository {
 
   // ─── Disponibilidade de Jogadores ──────────────────────────────────────────
 
-  Stream<List<PlayerAvailabilityModel>> availabilityStream() => _availability
-      .where('expiresAt', isGreaterThan: Timestamp.now())
-      .snapshots()
-      .map((s) => s.docs.map(PlayerAvailabilityModel.fromFirestore).toList());
+  Stream<List<PlayerAvailabilityModel>> availabilityStream({int limit = 200}) =>
+      _availability
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .limit(limit)
+          .snapshots()
+          .map((s) =>
+              s.docs.map(PlayerAvailabilityModel.fromFirestore).toList());
 
   Future<Either<AppFailure, Unit>> markAvailability({
     required String sport,

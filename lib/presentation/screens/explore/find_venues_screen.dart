@@ -6,6 +6,7 @@ import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../providers/sports_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/verified_badge.dart';
 import 'map_screen.dart';
 import 'venue_detail_screen.dart';
 
@@ -23,6 +24,7 @@ class FindVenuesScreen extends ConsumerStatefulWidget {
 
 class _FindVenuesScreenState extends ConsumerState<FindVenuesScreen> {
   String? _sportFilter;
+  bool _verifiedOnly = false;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class _FindVenuesScreenState extends ConsumerState<FindVenuesScreen> {
 
     final venues = allVenues.where((v) {
       if (_sportFilter != null && v.sport != _sportFilter) return false;
+      if (_verifiedOnly && !v.isVerified) return false;
       return true;
     }).toList()
       ..sort((a, b) {
@@ -60,6 +63,17 @@ class _FindVenuesScreenState extends ConsumerState<FindVenuesScreen> {
                     label: const Text('Todos'),
                     selected: _sportFilter == null,
                     onSelected: (_) => setState(() => _sportFilter = null),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: Icon(Icons.verified_rounded,
+                        size: 16, color: Colors.blue.shade400),
+                    label: const Text('Apenas verificadas'),
+                    selected: _verifiedOnly,
+                    onSelected: (v) =>
+                        setState(() => _verifiedOnly = v),
                   ),
                 ),
                 ...kSportsList.map((s) => Padding(
@@ -124,7 +138,7 @@ class _FindVenuesScreenState extends ConsumerState<FindVenuesScreen> {
   }
 
   void _openDetail(SportsVenueModel v, double? lat, double? lng) {
-    AppNavigator.pushWithoutNavBar(
+    AppNavigator.pushWithNavBar(
       context,
       VenueDetailScreen(venue: v, userLat: lat, userLng: lng),
     );
@@ -191,6 +205,10 @@ class _VenueTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
+            if (venue.isVerified) ...[
+              const SizedBox(width: 4),
+              const VerifiedBadge(size: 14),
+            ],
             if (occLabel != null) ...[
               const SizedBox(width: 6),
               Container(

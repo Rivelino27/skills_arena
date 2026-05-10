@@ -32,18 +32,139 @@ class ChatRepository {
     return '${sorted[0]}_${sorted[1]}';
   }
 
-  Stream<List<ConversationModel>> conversationsStream(String uid) => _chats
-      .where('participants', arrayContains: uid)
-      .orderBy('lastMessageAt', descending: true)
-      .snapshots()
-      .map((s) => s.docs.map(ConversationModel.fromFirestore).toList());
+  /// Deterministic chat ID for a venue + day + hour slot.
+  /// New day = new chat ID, so messages reset naturally each day.
+  static String buildVenueSlotChatId(String venueId, DateTime startAt) {
+    final date = '${startAt.year}'
+        '${startAt.month.toString().padLeft(2, '0')}'
+        '${startAt.day.toString().padLeft(2, '0')}';
+    final hour = startAt.hour.toString().padLeft(2, '0');
+    return 'venue_${venueId}_${date}_$hour';
+  }
 
-  Stream<List<MessageModel>> messagesStream(String chatId) => _chats
-      .doc(chatId)
-      .collection('messages')
-      .orderBy('createdAt', descending: false)
-      .snapshots()
-      .map((s) => s.docs.map(MessageModel.fromFirestore).toList());
+  /// Deterministic chat ID for a venue's whole-day group chat.
+  /// Same shape as the slot ID but without the hour suffix, so a new day
+  /// = a fresh chat (no message buildup).
+  static String buildVenueDayChatId(String venueId, DateTime day) {
+    final date = '${day.year}'
+        '${day.month.toString().padLeft(2, '0')}'
+        '${day.day.toString().padLeft(2, '0')}';
+    return 'venue_${venueId}_${date}_day';
+  }
+
+  /// Whole-day venue chat. Anyone signed in can join. Messages reset
+  /// daily because the chat ID rolls over at midnight.
+  Future<ConversationModel> getOrCreateVenueDayChat({
+    required String venueId,
+    required String venueName,
+    required DateTime day,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser!;
+    final id = buildVenueDayChatId(venueId, day);
+    final ref = _chats.doc(id);
+    final doc = await ref.get();
+
+    final dd = day.day.toString().padLeft(2, '0');
+    final mm = day.month.toString().padLeft(2, '0');
+    final groupName = '$venueName • $dd/$mm (dia)';
+
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [me.uid],
+        'participantNames': {me.uid: me.displayName ?? 'Eu'},
+        'participantPhotos': {me.uid: me.photoURL},
+        'lastMessage': null,
+        'lastMessageAt': Timestamp.now(),
+        'isGroup': true,
+        // Reuse the same Firestore-rule branch as slot groups so any
+        // signed-in user can join.
+        'isVenueSlotGroup': true,
+        'venueId': venueId,
+        'groupName': groupName,
+      });
+    } else {
+      final data = doc.data()!;
+      final participants =
+          List<String>.from(data['participants'] as List? ?? []);
+      if (!participants.contains(me.uid)) {
+        await ref.update({
+          'participants': FieldValue.arrayUnion([me.uid]),
+          'participantNames.${me.uid}': me.displayName ?? 'Eu',
+          'participantPhotos.${me.uid}': me.photoURL,
+        });
+      }
+    }
+    final fresh = await ref.get();
+    return ConversationModel.fromFirestore(fresh);
+  }
+
+  /// Gets or joins the venue-slot group chat. Creates with current user
+  /// if it doesn't exist; otherwise adds current user to participants.
+  /// Anyone signed-in can join (Firestore rules permit isVenueSlotGroup chats).
+  Future<ConversationModel> getOrCreateVenueSlotChat({
+    required String venueId,
+    required String venueName,
+    required DateTime startAt,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser!;
+    final id = buildVenueSlotChatId(venueId, startAt);
+    final ref = _chats.doc(id);
+    final doc = await ref.get();
+
+    final hh = startAt.hour.toString().padLeft(2, '0');
+    final dd = startAt.day.toString().padLeft(2, '0');
+    final mm = startAt.month.toString().padLeft(2, '0');
+    final groupName = '$venueName • $dd/$mm ${hh}h';
+
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [me.uid],
+        'participantNames': {me.uid: me.displayName ?? 'Eu'},
+        'participantPhotos': {me.uid: me.photoURL},
+        'lastMessage': null,
+        'lastMessageAt': Timestamp.now(),
+        'isGroup': true,
+        'isVenueSlotGroup': true,
+        'venueId': venueId,
+        'groupName': groupName,
+      });
+    } else {
+      final data = doc.data()!;
+      final participants =
+          List<String>.from(data['participants'] as List? ?? []);
+      if (!participants.contains(me.uid)) {
+        await ref.update({
+          'participants': FieldValue.arrayUnion([me.uid]),
+          'participantNames.${me.uid}': me.displayName ?? 'Eu',
+          'participantPhotos.${me.uid}': me.photoURL,
+        });
+      }
+    }
+    final fresh = await ref.get();
+    return ConversationModel.fromFirestore(fresh);
+  }
+
+  Stream<List<ConversationModel>> conversationsStream(String uid,
+          {int limit = 100}) =>
+      _chats
+          .where('participants', arrayContains: uid)
+          .orderBy('lastMessageAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(ConversationModel.fromFirestore).toList());
+
+  /// Last [limit] messages, in chronological order. Fetched newest-first
+  /// then reversed so the newest stays at the bottom of the chat.
+  Stream<List<MessageModel>> messagesStream(String chatId, {int limit = 200}) =>
+      _chats
+          .doc(chatId)
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.reversed
+              .map(MessageModel.fromFirestore)
+              .toList());
 
   /// Throws an exception when one of the users blocked the other.
   Future<ConversationModel> getOrCreateConversation({
@@ -139,6 +260,36 @@ class ChatRepository {
     batch.set(msgRef, msg.toMap());
     batch.update(_chats.doc(chatId), {
       'lastMessage': text.trim(),
+      'lastMessageAt': Timestamp.fromDate(now),
+      'lastSenderId': user.uid,
+      'lastReadAt.${user.uid}': Timestamp.fromDate(now),
+    });
+    await batch.commit();
+  }
+
+  /// Sends a one-shot location message (lat/lng) into the conversation.
+  Future<void> sendLocationMessage({
+    required String chatId,
+    required double lat,
+    required double lng,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser!;
+    final now = DateTime.now();
+    final msg = MessageModel(
+      id: '',
+      senderId: user.uid,
+      senderName: user.displayName ?? 'Eu',
+      text: '📍 Localização',
+      type: MessageType.location,
+      lat: lat,
+      lng: lng,
+      createdAt: now,
+    );
+    final batch = _db.batch();
+    final msgRef = _chats.doc(chatId).collection('messages').doc();
+    batch.set(msgRef, msg.toMap());
+    batch.update(_chats.doc(chatId), {
+      'lastMessage': '📍 Localização',
       'lastMessageAt': Timestamp.fromDate(now),
       'lastSenderId': user.uid,
       'lastReadAt.${user.uid}': Timestamp.fromDate(now),

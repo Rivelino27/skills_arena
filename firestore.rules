@@ -11,10 +11,44 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    /// True when the requesting user has `isAdmin: true` in their user
+    /// document. Admins can flip the `isVerified` flag on venues / users.
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.get('isAdmin', false) == true;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────
+    // The user owns their own document, BUT:
+    //   - `isAdmin` and `isPremium` cannot be set by the client.
+    //     They must be promoted out-of-band (Firebase console or Cloud
+    //     Function). Otherwise any signed-in user could grant themselves
+    //     admin or premium roles.
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create, update: if isMe(uid);
+      allow create: if isMe(uid)
+        && request.resource.data.get('isAdmin', false) == false
+        && request.resource.data.get('isPremium', false) == false
+        && request.resource.data.get('isVerified', false) == false;
+      // The user can update their own document, but cannot promote
+      // themselves to admin/premium/verified — those flags must stay
+      // unchanged unless an admin is doing the write.
+      allow update: if (
+        isMe(uid)
+        && request.resource.data.get('isAdmin', false)
+            == resource.data.get('isAdmin', false)
+        && request.resource.data.get('isPremium', false)
+            == resource.data.get('isPremium', false)
+        && request.resource.data.get('isVerified', false)
+            == resource.data.get('isVerified', false)
+      ) || (
+        // Admins can flip flags on any user.
+        isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isAdmin', 'isPremium', 'isVerified'])
+      );
       allow delete: if false;
     }
 
@@ -24,13 +58,28 @@ service cloud.firestore {
     // occupancyUpdatedAt, occupancyUpdatedBy). All other fields are author-only.
     match /sports_venues/{venueId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.addedBy == request.auth.uid;
+      // Creator cannot self-mark as verified.
+      allow create: if isSignedIn()
+        && request.resource.data.addedBy == request.auth.uid
+        && request.resource.data.get('isVerified', false) == false;
       allow update: if isSignedIn() && (
-        resource.data.addedBy == request.auth.uid
+        // Author can update most fields, but cannot flip `isVerified`.
+        (
+          resource.data.addedBy == request.auth.uid
+          && request.resource.data.get('isVerified', false)
+              == resource.data.get('isVerified', false)
+        )
+        // Anyone signed-in can patch occupancy fields.
         || (
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['occupancy', 'occupancyUpdatedAt', 'occupancyUpdatedBy'])
           && request.resource.data.occupancyUpdatedBy == request.auth.uid
+        )
+        // Only admins can flip the verified flag.
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isVerified', 'verifiedBy', 'verifiedAt'])
         )
       );
       allow delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;
@@ -75,18 +124,38 @@ service cloud.firestore {
     }
 
     // ── Chats ─────────────────────────────────────────────────────────────
-    // Field: `participants` (list of two UIDs).
+    // Field: `participants` (list of UIDs).
     // `resource == null` lets `getOrCreateConversation` probe before creating.
+    // Venue-slot group chats (`isVenueSlotGroup: true`) are public-join: any
+    // signed-in user can create with size>=1 or join an existing one.
     match /chats/{chatId} {
       allow get: if isSignedIn() && (
         resource == null || request.auth.uid in resource.data.participants
       );
       allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
       // size() >= 2 supports both 1-1 chats and N-party group chats.
+      // Venue-slot groups are an exception: created with the first attendee.
       allow create: if isSignedIn()
         && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants.size() >= 2;
-      allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
+        && (
+          request.resource.data.participants.size() >= 2
+          || request.resource.data.get('isVenueSlotGroup', false) == true
+        );
+      // Non-participants can only update venue-slot groups, and only to
+      // ADD themselves to participants (not to modify other fields, not
+      // to remove anyone). Once they're a participant, the first branch
+      // allows full updates (e.g., lastMessage, lastReadAt, etc.).
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+        || (
+          resource.data.get('isVenueSlotGroup', false) == true
+          && request.auth.uid in request.resource.data.participants
+          && request.resource.data.participants
+              .hasAll(resource.data.participants)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['participants', 'participantNames', 'participantPhotos'])
+        )
+      );
       allow delete: if false;
 
       // Messages — field: `senderId`

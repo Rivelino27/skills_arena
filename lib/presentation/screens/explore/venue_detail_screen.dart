@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../../data/models/venue_attendance_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/sports_provider.dart';
+import '../../providers/user_provider.dart';
+import '../../widgets/verified_badge.dart';
+import '../chat/conversation_screen.dart';
 
 class VenueDetailScreen extends ConsumerStatefulWidget {
   final SportsVenueModel venue;
@@ -52,14 +58,39 @@ class _VenueDetailScreenState extends ConsumerState<VenueDetailScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.venue.name,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(widget.venue.sport,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          ],
+        title: Consumer(
+          builder: (_, ref, __) {
+            // Watch live so the verified badge appears immediately after
+            // an admin flips the flag.
+            final live = ref
+                .watch(venuesStreamProvider)
+                .valueOrNull
+                ?.where((v) => v.id == widget.venue.id)
+                .firstOrNull ??
+                widget.venue;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(live.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                    if (live.isVerified) ...[
+                      const SizedBox(width: 6),
+                      const VerifiedBadge(size: 14, tooltip: 'Quadra verificada'),
+                    ],
+                  ],
+                ),
+                Text(live.sport,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            );
+          },
         ),
         bottom: TabBar(
           controller: _tabController,
@@ -172,16 +203,37 @@ class _InfoTab extends ConsumerWidget {
                     : cs.onSurface,
               ),
             ),
+            if (v.isVerified)
+              Chip(
+                avatar: Icon(Icons.verified_rounded,
+                    size: 16, color: Colors.blue.shade400),
+                label: const Text('Verificada'),
+                backgroundColor: Colors.blue.withValues(alpha: 0.12),
+              ),
           ],
         ),
+        // Admin-only toggle.
+        _AdminVerifyToggle(venue: v),
         const SizedBox(height: 20),
 
         // ── Status atual da quadra ─────────────────────────────────────
         _OccupancySection(venue: v),
         const SizedBox(height: 8),
 
+        // ── Chat geral do dia da quadra ───────────────────────────────
+        _DayChatSection(venue: v),
+        const SizedBox(height: 8),
+
         // ── Quem vai jogar lá ─────────────────────────────────────────
-        _AttendanceSection(venueId: v.id),
+        _AttendanceSection(venueId: v.id, venueName: v.name),
+        const SizedBox(height: 8),
+
+        // ── Jogadores na região (querem jogar perto desta quadra) ─────
+        _NearbyPlayersSection(venue: v),
+        const SizedBox(height: 8),
+
+        // ── Como chegar (Google Maps / Uber) ──────────────────────────
+        _NavigationSection(venue: v),
         const SizedBox(height: 8),
 
         _InfoTile(
@@ -881,7 +933,11 @@ class _AddPostSheetState extends ConsumerState<_AddPostSheet> {
 
 class _AttendanceSection extends ConsumerWidget {
   final String venueId;
-  const _AttendanceSection({required this.venueId});
+  final String venueName;
+  const _AttendanceSection({required this.venueId, required this.venueName});
+
+  static String _slotKey(DateTime dt) =>
+      '${dt.year}-${dt.month}-${dt.day}-${dt.hour}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -891,7 +947,15 @@ class _AttendanceSection extends ConsumerWidget {
     final attendees =
         ref.watch(venueAttendanceProvider(venueId)).valueOrNull ?? const [];
     final mine = attendees.where((a) => a.userId == myUid).firstOrNull;
-    final others = attendees.where((a) => a.userId != myUid).toList();
+
+    // Group by hour slot (date + hour).
+    final slots = <String, List<VenueAttendanceModel>>{};
+    for (final a in attendees) {
+      slots.putIfAbsent(_slotKey(a.startAt), () => []).add(a);
+    }
+    final slotEntries = slots.entries.toList()
+      ..sort((a, b) =>
+          a.value.first.startAt.compareTo(b.value.first.startAt));
 
     return Card(
       child: Padding(
@@ -913,7 +977,8 @@ class _AttendanceSection extends ConsumerWidget {
                       Text(
                         attendees.isEmpty
                             ? 'Ninguém marcou presença ainda.'
-                            : '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'} confirmada${attendees.length == 1 ? '' : 's'}.',
+                            : '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'} • '
+                                '${slots.length} horário${slots.length == 1 ? '' : 's'}',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.onSurfaceVariant),
                       ),
@@ -923,41 +988,30 @@ class _AttendanceSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            if (mine != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: cs.onPrimaryContainer),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Você marcou: ${_formatRange(mine.startAt, mine.endAt)}',
-                        style: TextStyle(color: cs.onPrimaryContainer),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _cancel(context, ref),
-                      child: const Text('Cancelar'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (others.isNotEmpty) ...[
-              ...others.map((a) => _AttendeeTile(
-                    attendance: a,
-                    onJoin: () => _joinSlot(context, ref, a),
-                  )),
-              const SizedBox(height: 8),
-            ],
+            ...slotEntries.map((e) {
+              final slotList = e.value;
+              final slotStart = slotList.first.startAt;
+              final imIn = slotList.any((a) => a.userId == myUid);
+              return _SlotCard(
+                attendees: slotList,
+                slotStart: slotStart,
+                myUid: myUid,
+                onOpenChat: imIn
+                    ? () => _openSlotChat(context, ref, slotStart)
+                    : null,
+                onJoinSlot: imIn
+                    ? null
+                    : () => _showMarkSheet(
+                          context,
+                          ref,
+                          prefilledStart: slotStart,
+                          prefilledDuration: slotList.first.endAt
+                              .difference(slotStart),
+                        ),
+                onCancel: imIn ? () => _cancel(context, ref) : null,
+              );
+            }),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () => _showMarkSheet(context, ref),
               icon: Icon(mine == null
@@ -992,11 +1046,23 @@ class _AttendanceSection extends ConsumerWidget {
           startAt: result.start,
           duration: result.duration,
         );
-    res.fold(
-      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
-      (_) => messenger.showSnackBar(
-        const SnackBar(content: Text('Presença marcada!')),
-      ),
+    if (!context.mounted) return;
+    await res.fold(
+      (f) async => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) async {
+        // Auto-join the venue-slot group chat for this slot.
+        try {
+          await ref.read(chatRepositoryProvider).getOrCreateVenueSlotChat(
+                venueId: venueId,
+                venueName: venueName,
+                startAt: result.start,
+              );
+        } catch (_) {/* non-fatal */}
+        messenger.showSnackBar(
+          const SnackBar(
+              content: Text('Presença marcada! Grupo do horário pronto.')),
+        );
+      },
     );
   }
 
@@ -1012,71 +1078,175 @@ class _AttendanceSection extends ConsumerWidget {
     );
   }
 
-  void _joinSlot(
-      BuildContext context, WidgetRef ref, VenueAttendanceModel a) {
-    _showMarkSheet(
-      context,
-      ref,
-      prefilledStart: a.startAt,
-      prefilledDuration: a.endAt.difference(a.startAt),
-    );
+  Future<void> _openSlotChat(
+      BuildContext context, WidgetRef ref, DateTime slotStart) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateVenueSlotChat(
+                venueId: venueId,
+                venueName: venueName,
+                startAt: slotStart,
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Erro ao abrir grupo: $e')));
+    }
   }
 
-  static String _formatRange(DateTime s, DateTime e) {
-    String hh(DateTime d) =>
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    final sameDay = s.year == e.year && s.month == e.month && s.day == e.day;
-    final today = DateTime.now();
-    final isToday = s.year == today.year &&
-        s.month == today.month &&
-        s.day == today.day;
-    final dayLabel = isToday
-        ? 'hoje'
-        : '${s.day.toString().padLeft(2, '0')}/${s.month.toString().padLeft(2, '0')}';
-    return sameDay
-        ? '$dayLabel ${hh(s)} – ${hh(e)}'
-        : '$dayLabel ${hh(s)} → ${hh(e)}';
-  }
 }
 
-class _AttendeeTile extends StatelessWidget {
-  final VenueAttendanceModel attendance;
-  final VoidCallback onJoin;
+class _SlotCard extends StatelessWidget {
+  final List<VenueAttendanceModel> attendees;
+  final DateTime slotStart;
+  final String myUid;
+  final VoidCallback? onOpenChat;
+  final VoidCallback? onJoinSlot;
+  final VoidCallback? onCancel;
 
-  const _AttendeeTile({required this.attendance, required this.onJoin});
+  const _SlotCard({
+    required this.attendees,
+    required this.slotStart,
+    required this.myUid,
+    this.onOpenChat,
+    this.onJoinSlot,
+    this.onCancel,
+  });
+
+  String _slotLabel() {
+    final now = DateTime.now();
+    final isToday = slotStart.year == now.year &&
+        slotStart.month == now.month &&
+        slotStart.day == now.day;
+    final isTomorrow = slotStart.year == now.year &&
+        slotStart.month == now.month &&
+        slotStart.day == now.day + 1;
+    final hh = slotStart.hour.toString().padLeft(2, '0');
+    final next = ((slotStart.hour + 1) % 24).toString().padLeft(2, '0');
+    final dayPart = isToday
+        ? 'Hoje'
+        : isTomorrow
+            ? 'Amanhã'
+            : '${slotStart.day.toString().padLeft(2, '0')}/'
+                '${slotStart.month.toString().padLeft(2, '0')}';
+    return '$dayPart • ${hh}h–${next}h';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundImage: attendance.userPhotoUrl != null
-            ? NetworkImage(attendance.userPhotoUrl!)
-            : null,
-        backgroundColor: cs.primaryContainer,
-        child: attendance.userPhotoUrl == null
-            ? Text(
-                attendance.userName.isNotEmpty
-                    ? attendance.userName[0].toUpperCase()
-                    : '?',
-                style: TextStyle(color: cs.onPrimaryContainer),
-              )
-            : null,
+    final iAmIn = onOpenChat != null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: iAmIn
+            ? cs.primaryContainer.withValues(alpha: 0.5)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: iAmIn
+              ? cs.primary.withValues(alpha: 0.4)
+              : cs.outlineVariant,
+        ),
       ),
-      title: Text(attendance.userName,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-        _AttendanceSection._formatRange(
-            attendance.startAt, attendance.endAt),
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: cs.onSurfaceVariant),
-      ),
-      trailing: TextButton.icon(
-        onPressed: onJoin,
-        icon: const Icon(Icons.group_add_rounded, size: 18),
-        label: const Text('Juntar'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule_rounded,
+                  size: 18, color: iAmIn ? cs.primary : cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(_slotLabel(),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${attendees.length} pessoa${attendees.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: attendees
+                .map((a) => Chip(
+                      avatar: CircleAvatar(
+                        radius: 10,
+                        backgroundImage: a.userPhotoUrl != null
+                            ? NetworkImage(a.userPhotoUrl!)
+                            : null,
+                        backgroundColor: cs.surfaceContainerHighest,
+                        child: a.userPhotoUrl == null
+                            ? Text(
+                                a.userName.isNotEmpty
+                                    ? a.userName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(fontSize: 10),
+                              )
+                            : null,
+                      ),
+                      label: Text(
+                        a.userId == myUid ? 'Você' : a.userName,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (onOpenChat != null)
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onOpenChat,
+                    icon: const Icon(Icons.forum_rounded, size: 18),
+                    label: const Text('Abrir grupo'),
+                  ),
+                ),
+              if (onJoinSlot != null)
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onJoinSlot,
+                    icon: const Icon(Icons.group_add_rounded, size: 18),
+                    label: const Text('Juntar a este horário'),
+                  ),
+                ),
+              if (onCancel != null) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: onCancel,
+                  child: const Text('Cancelar'),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1241,6 +1411,363 @@ class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
             label: const Text('Confirmar presença'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Chat geral do dia da quadra ─────────────────────────────────────────
+//
+// Single chat per (venue, day). Anyone who opens this card joins. Messages
+// reset daily because the chat ID rolls over at midnight (the backend uses
+// `venue_<id>_<YYYYMMDD>_day` as the doc ID).
+
+class _DayChatSection extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _DayChatSection({required this.venue});
+
+  Future<void> _openDayChat(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateVenueDayChat(
+                venueId: venue.id,
+                venueName: venue.name,
+                day: DateTime.now(),
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Erro ao abrir chat do dia: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      color: cs.primaryContainer.withValues(alpha: 0.4),
+      child: InkWell(
+        onTap: () => _openDayChat(context, ref),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Icon(Icons.forum_rounded, color: cs.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chat do dia',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Conversa com todo mundo que vai jogar nessa quadra hoje. '
+                      'Mensagens resetam à meia-noite.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Jogadores na região (querem jogar perto desta quadra) ────────────────
+
+class _NearbyPlayersSection extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _NearbyPlayersSection({required this.venue});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final allPlayers =
+        ref.watch(availabilityStreamProvider).valueOrNull ?? const [];
+
+    // A player is "nearby this venue" when the venue lat/lng falls within
+    // the player's own search radius from where they marked availability.
+    final nearby = allPlayers.where((p) {
+      if (p.userId == myUid) return false;
+      final d = GeoUtils.distanceKm(p.lat, p.lng, venue.lat, venue.lng);
+      return d <= p.radiusKm;
+    }).toList()
+      ..sort((a, b) {
+        final da = GeoUtils.distanceKm(a.lat, a.lng, venue.lat, venue.lng);
+        final db = GeoUtils.distanceKm(b.lat, b.lng, venue.lat, venue.lng);
+        return da.compareTo(db);
+      });
+
+    // Group by sport for the chip row.
+    final bySport = <String, int>{};
+    for (final p in nearby) {
+      bySport.update(p.sport, (n) => n + 1, ifAbsent: () => 1);
+    }
+    final sportEntries = bySport.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.groups_3_rounded, color: cs.tertiary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Jogadores na região',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        nearby.isEmpty
+                            ? 'Ninguém marcou “quero jogar” por aqui ainda.'
+                            : '${nearby.length} jogador${nearby.length == 1 ? '' : 'es'} '
+                                'querem jogar perto desta quadra',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (nearby.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: sportEntries
+                    .map((e) => Chip(
+                          avatar:
+                              const Icon(Icons.sports_rounded, size: 14),
+                          label: Text('${e.key} • ${e.value}',
+                              style: const TextStyle(fontSize: 12)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              ...nearby.take(5).map((p) {
+                final dist = GeoUtils.distanceKm(
+                    p.lat, p.lng, venue.lat, venue.lng);
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  leading: CircleAvatar(
+                    radius: 18,
+                    backgroundImage: p.userPhotoUrl != null
+                        ? NetworkImage(p.userPhotoUrl!)
+                        : null,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    child: p.userPhotoUrl == null
+                        ? Text(
+                            p.userName.isNotEmpty
+                                ? p.userName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(fontSize: 13),
+                          )
+                        : null,
+                  ),
+                  title: Text(p.userName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(
+                    '${p.sport} • ${GeoUtils.formatDistance(dist)}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                );
+              }),
+              if (nearby.length > 5)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '+ ${nearby.length - 5} jogador'
+                    '${nearby.length - 5 == 1 ? '' : 'es'} '
+                    'na lista completa.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Admin: alternar selo de verificada ─────────────────────────────────────
+
+class _AdminVerifyToggle extends ConsumerWidget {
+  final SportsVenueModel venue;
+  const _AdminVerifyToggle({required this.venue});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    if (me == null || !me.isAdmin) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        color: cs.tertiaryContainer.withValues(alpha: 0.4),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Icon(Icons.shield_moon_rounded, color: cs.tertiary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Admin',
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      venue.isVerified
+                          ? 'Quadra está verificada'
+                          : 'Quadra ainda não verificada',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: venue.isVerified,
+                onChanged: (v) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final res = await ref
+                      .read(sportsRepositoryProvider)
+                      .setVenueVerified(
+                          venueId: venue.id, verified: v);
+                  res.fold(
+                    (f) => messenger.showSnackBar(
+                        SnackBar(content: Text(f.message))),
+                    (_) => messenger.showSnackBar(
+                      SnackBar(
+                          content: Text(v
+                              ? 'Quadra marcada como verificada.'
+                              : 'Verificação removida.')),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Como chegar (apps externos de navegação) ───────────────────────────────
+
+class _NavigationSection extends StatelessWidget {
+  final SportsVenueModel venue;
+  const _NavigationSection({required this.venue});
+
+  Future<void> _openGoogleMaps(BuildContext context) async {
+    final uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível abrir o Google Maps.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openUber(BuildContext context) async {
+    final name = Uri.encodeComponent(venue.name);
+    // Tries the Uber app first, falls back to the mobile web URL.
+    final appUri = Uri.parse(
+        'uber://?action=setPickup&pickup=my_location&dropoff[latitude]=${venue.lat}&dropoff[longitude]=${venue.lng}&dropoff[nickname]=$name');
+    final webUri = Uri.parse(
+        'https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${venue.lat}&dropoff[longitude]=${venue.lng}&dropoff[nickname]=$name');
+    final ok = await launchUrl(appUri, mode: LaunchMode.externalApplication)
+        .catchError((_) => false);
+    if (ok) return;
+    final web =
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    if (!web && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o Uber.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.alt_route_rounded, color: cs.primary),
+                const SizedBox(width: 10),
+                Text('Como chegar',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openGoogleMaps(context),
+                    icon: const Icon(Icons.map_rounded),
+                    label: const Text('Google Maps'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openUber(context),
+                    icon: const Icon(Icons.local_taxi_rounded),
+                    label: const Text('Uber'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

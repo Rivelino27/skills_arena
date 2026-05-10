@@ -89,12 +89,15 @@ class PostRepository {
 
   // ─── Comentários ──────────────────────────────────────────────────────────
 
-  Stream<List<CommentModel>> commentsStream(String postId) => _posts
-      .doc(postId)
-      .collection('comments')
-      .orderBy('createdAt', descending: false)
-      .snapshots()
-      .map((s) => s.docs.map(CommentModel.fromFirestore).toList());
+  Stream<List<CommentModel>> commentsStream(String postId,
+          {int limit = 200}) =>
+      _posts
+          .doc(postId)
+          .collection('comments')
+          .orderBy('createdAt', descending: false)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(CommentModel.fromFirestore).toList());
 
   Future<Either<AppFailure, Unit>> addComment({
     required String postId,
@@ -123,6 +126,29 @@ class PostRepository {
       return const Right(unit);
     } catch (e) {
       return const Left(ServerFailure(message: 'Erro ao comentar.'));
+    }
+  }
+
+  Future<Either<AppFailure, Unit>> deleteComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Não autenticado.'));
+      }
+      final batch = _db.batch();
+      batch.delete(
+          _posts.doc(postId).collection('comments').doc(commentId));
+      batch.update(_posts.doc(postId), {
+        'commentsCount': FieldValue.increment(-1),
+      });
+      await batch.commit();
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao apagar comentário.'));
     }
   }
 

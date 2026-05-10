@@ -5,9 +5,8 @@ import '../../../data/models/post_model.dart';
 import '../../../data/repositories/post_repository.dart';
 
 // ─── PADRÃO DE NAVEGAÇÃO ──────────────────────────────────────────────────────
-// Aberta via AppNavigator.pushWithoutNavBar() — bottom nav bar OCULTA.
-// AppBar: visível com botão de voltar padrão (sem customização necessária aqui).
-// Para ocultar a AppBar: use Scaffold(appBar: null, body: ...).
+// Aberta via AppNavigator.pushWithNavBar() — bottom nav bar VISÍVEL.
+// AppBar: visível com botão de voltar padrão.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CreatePostScreen extends ConsumerStatefulWidget {

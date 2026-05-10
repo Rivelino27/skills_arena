@@ -19,6 +19,7 @@ import '../../../data/repositories/social_repository.dart';
 import '../../providers/sports_provider.dart';
 import '../../providers/user_provider.dart';
 import '../chat/conversation_screen.dart';
+import '../profile/user_profile_screen.dart';
 import 'add_venue_screen.dart';
 import 'find_players_screen.dart';
 import 'venue_detail_screen.dart';
@@ -177,7 +178,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   void _reverseGeocode(LatLng pos) {
     _revGeoDebounce?.cancel();
-    _revGeoDebounce = Timer(const Duration(milliseconds: 600), () async {
+    _revGeoDebounce = Timer(const Duration(seconds: 2), () async {
       if (!mounted) return;
       setState(() => _reverseGeocoding = true);
       try {
@@ -246,12 +247,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _searchCtrl.clear();
   }
 
+  /// Best lat/lng to anchor the map on:
+  /// 1. live GPS (if granted),
+  /// 2. user's fixed/last-known address from their profile,
+  /// 3. São Paulo default.
+  /// Map works fully without GPS as long as (2) is set.
+  LatLng? _fallbackCenter() {
+    if (_userPosition != null) {
+      return LatLng(_userPosition!.latitude, _userPosition!.longitude);
+    }
+    final me = ref.read(currentUserProvider).valueOrNull;
+    if (me?.effectiveLat != null && me?.effectiveLng != null) {
+      return LatLng(me!.effectiveLat!, me.effectiveLng!);
+    }
+    return null;
+  }
+
   Future<void> _initLocation() async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled()
           .timeout(const Duration(seconds: 3), onTimeout: () => false);
       if (!serviceEnabled) {
-        if (mounted) setState(() => _loadingLocation = false);
+        _useFixedAddressIfAny();
         return;
       }
 
@@ -261,7 +278,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
       if (permission != LocationPermission.whileInUse &&
           permission != LocationPermission.always) {
-        if (mounted) setState(() => _loadingLocation = false);
+        _useFixedAddressIfAny();
         return;
       }
 
@@ -294,7 +311,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             );
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingLocation = false);
+      _useFixedAddressIfAny();
+    }
+  }
+
+  /// GPS unavailable / denied — center the map on the user's fixed address
+  /// if they have one. If not, the default São Paulo center is used.
+  void _useFixedAddressIfAny() {
+    if (!mounted) return;
+    setState(() => _loadingLocation = false);
+    if (widget.initialLat != null && widget.initialLng != null) return;
+    final me = ref.read(currentUserProvider).valueOrNull;
+    if (me?.effectiveLat != null && me?.effectiveLng != null) {
+      _mapController.move(
+          LatLng(me!.effectiveLat!, me.effectiveLng!), 14.0);
     }
   }
 
@@ -302,6 +332,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final venues = ref.watch(venuesStreamProvider).valueOrNull ?? [];
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
+    final visibleUsers =
+        ref.watch(visibleUsersStreamProvider).valueOrNull ?? const [];
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
     final radius = ref.watch(mapRadiusProvider);
     final selectedSport = ref.watch(selectedSportFilterProvider);
     final cs = Theme.of(context).colorScheme;
@@ -310,12 +343,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ? venues
         : venues.where((v) => v.sport == selectedSport).toList();
 
+    // Use GPS first, then user's fixed address. If neither, no distance
+    // filter is applied (player markers all show).
+    final center = _fallbackCenter();
     final filteredPlayers = players.where((p) {
       if (selectedSport != null && p.sport != selectedSport) return false;
-      if (_userPosition == null) return true;
+      if (center == null) return true;
       return GeoUtils.distanceKm(
-            _userPosition!.latitude, _userPosition!.longitude,
-            p.lat, p.lng) <=
+              center.latitude, center.longitude, p.lat, p.lng) <=
+          radius;
+    }).toList();
+
+    // Visible users with a known location, minus self and minus those
+    // already shown as "querem jogar" markers (no double-pin).
+    final playerUids = players.map((p) => p.userId).toSet();
+    final filteredVisibleUsers = visibleUsers.where((u) {
+      if (u.id == myUid) return false;
+      if (playerUids.contains(u.id)) return false;
+      final lat = u.effectiveLat;
+      final lng = u.effectiveLng;
+      if (lat == null || lng == null) return false;
+      if (center == null) return true;
+      return GeoUtils.distanceKm(
+              center.latitude, center.longitude, lat, lng) <=
           radius;
     }).toList();
 
@@ -358,10 +408,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               initialCenter: widget.initialLat != null &&
                       widget.initialLng != null
                   ? LatLng(widget.initialLat!, widget.initialLng!)
-                  : _userPosition != null
-                      ? LatLng(
-                          _userPosition!.latitude, _userPosition!.longitude)
-                      : _defaultCenter,
+                  : (_fallbackCenter() ?? _defaultCenter),
               initialZoom: widget.initialZoom ?? 13.0,
               onMapEvent: (event) {
                 if (_pinMode && event is MapEventMove) {
@@ -415,6 +462,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             onTap: () =>
                                 _showPlayerSheet(context, p),
                             child: _PlayerMarker(player: p),
+                          ),
+                        ))
+                    .toList(),
+              ),
+              // Marcadores de outros usuários no mapa
+              MarkerLayer(
+                markers: filteredVisibleUsers
+                    .map((u) => Marker(
+                          point:
+                              LatLng(u.effectiveLat!, u.effectiveLng!),
+                          width: 40,
+                          height: 40,
+                          child: GestureDetector(
+                            onTap: () => _showUserSheet(context, u),
+                            child: _UserMarker(user: u),
                           ),
                         ))
                     .toList(),
@@ -720,12 +782,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _centerOnUser() {
-    if (_userPosition != null) {
-      _mapController.move(
-        LatLng(_userPosition!.latitude, _userPosition!.longitude),
-        15.0,
+    final target = _fallbackCenter();
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Sem GPS nem endereço fixo. Cadastre seu endereço no perfil.'),
+        ),
       );
+      return;
     }
+    _mapController.move(target, 15.0);
   }
 
   void _enterPinMode() {
@@ -748,7 +815,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _pinAddress = null;
     });
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await AppNavigator.pushWithoutNavBar<bool>(
+    final ok = await AppNavigator.pushWithNavBar<bool>(
       context,
       AddVenueScreen(
         userLat: _pinPosition.latitude,
@@ -865,7 +932,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       child: FilledButton.icon(
                         onPressed: () {
                           Navigator.of(ctx).pop();
-                          AppNavigator.pushWithoutNavBar(
+                          AppNavigator.pushWithNavBar(
                             context,
                             VenueDetailScreen(
                               venue: v,
@@ -876,6 +943,114 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         },
                         icon: const Icon(Icons.info_outline_rounded),
                         label: const Text('Detalhes'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showUserSheet(BuildContext context, UserModel user) {
+    final center = _fallbackCenter();
+    final dist = (center == null ||
+            user.effectiveLat == null ||
+            user.effectiveLng == null)
+        ? null
+        : GeoUtils.distanceKm(center.latitude, center.longitude,
+            user.effectiveLat!, user.effectiveLng!);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        final name = user.name ?? 'Usuário';
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 36,
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
+                  backgroundColor: cs.primaryContainer,
+                  child: user.photoUrl == null
+                      ? Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: theme.textTheme.titleLarge,
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(name,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                    ),
+                    if (user.isAdmin) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.verified_user_rounded,
+                          size: 16, color: Colors.amber.shade700),
+                    ] else if (user.isPremium) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.workspace_premium_rounded,
+                          size: 16, color: Colors.amber.shade600),
+                    ] else if (user.isVerified) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.verified_rounded,
+                          size: 16, color: Colors.blue.shade400),
+                    ],
+                  ],
+                ),
+                if (dist != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      GeoUtils.formatDistance(dist),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          if (user.effectiveLat != null) {
+                            _animateTo(LatLng(
+                                user.effectiveLat!, user.effectiveLng!));
+                          }
+                        },
+                        icon: const Icon(Icons.center_focus_strong_rounded),
+                        label: const Text('Centralizar'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          AppNavigator.pushWithNavBar(context,
+                              UserProfileScreen(userId: user.id));
+                        },
+                        icon: const Icon(Icons.person_outline_rounded),
+                        label: const Text('Perfil'),
                       ),
                     ),
                   ],
@@ -1100,6 +1275,36 @@ class _PlayerMarker extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Marker for users who opted into `visibleOnMap` but did not mark
+/// "querem jogar hoje". Smaller and grayer than the active-player marker
+/// to keep visual hierarchy: active players > regular visible users.
+class _UserMarker extends StatelessWidget {
+  final UserModel user;
+  const _UserMarker({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = user.isVerified
+        ? Colors.blue.shade400
+        : (user.isPremium ? Colors.amber.shade700 : cs.outline);
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 2),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+      ),
+      child: user.photoUrl != null
+          ? ClipOval(
+              child: Image.network(user.photoUrl!,
+                  fit: BoxFit.cover, width: 40, height: 40),
+            )
+          : Icon(Icons.person_outline_rounded, color: color, size: 20),
     );
   }
 }

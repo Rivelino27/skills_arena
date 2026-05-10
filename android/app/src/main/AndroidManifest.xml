@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
+    <!--
+      NOTA: NÃO ative `android:enableOnBackInvokedCallback="true"` aqui.
+      Em Flutter < 3.16 o predictive back gesture do Android 13+ ignora
+      o `PopScope` da MainShell, fazendo o sistema sair do app em vez de
+      respeitar o histórico de abas. O W/WindowOnBackDispatcher no logcat
+      é apenas um aviso e pode ser ignorado. Quando atualizarmos para
+      Flutter 3.16+, podemos reativar a flag.
+    -->
     <application
         android:label="Skills Arena"
         android:name="${applicationName}"

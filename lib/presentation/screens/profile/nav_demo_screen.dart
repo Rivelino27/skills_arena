@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:skills_arena/presentation/screens/home/home_screen.dart';
 
 import '../../../core/navigation/app_navigator.dart';
+import '../../providers/main_tab_provider.dart';
 import '../../widgets/navigation/custom_back_button.dart';
 
 // ─── Hub de demonstração de navegação ────────────────────────────────────────
@@ -258,16 +261,25 @@ class _TestWithoutNavBar extends StatelessWidget {
 // AppBar: VISÍVEL com CustomBackButton   Nav bar: OCULTA (pushWithoutNavBar)
 // PopScope intercepta gesto de voltar do sistema e mostra o mesmo popup.
 
-class _TestCustomBack extends StatelessWidget {
+class _TestCustomBack extends ConsumerWidget {
   const _TestCustomBack();
 
+  /// Switch the shell to [tabIndex] AND clear all routes pushed above the
+  /// shell on the root navigator. Without the popUntil the new tab is
+  /// active but invisible behind whatever was pushed via pushWithoutNavBar.
+  void _goToTab(BuildContext context, WidgetRef ref, int tabIndex) {
+    ref.read(mainTabProvider.notifier).state = tabIndex;
+    Navigator.of(context, rootNavigator: true)
+        .popUntil((route) => route.isFirst);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _showExitSheet(context);
+        if (!didPop) _showExitSheet(context, ref);
       },
       child: Scaffold(
         appBar: AppBar(
@@ -280,13 +292,13 @@ class _TestCustomBack extends StatelessWidget {
                 icon: Icons.home_rounded,
                 label: 'Ir para Home',
                 subtitle: 'Fechar e voltar ao início',
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () => _goToTab(context, ref, 0),
               ),
               BackMenuOption(
                 icon: Icons.explore_outlined,
                 label: 'Ir para Explorar',
                 subtitle: 'Fechar e abrir o mapa',
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () => _goToTab(context, ref, 1),
               ),
             ],
           ),
@@ -313,7 +325,8 @@ class _TestCustomBack extends StatelessWidget {
     );
   }
 
-  void _showExitSheet(BuildContext context) {
+  void _showExitSheet(BuildContext context, WidgetRef ref) {
+    final screenNavigator = Navigator.of(context);
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -340,17 +353,15 @@ class _TestCustomBack extends StatelessWidget {
               subtitle: const Text('Retornar à tela anterior'),
               onTap: () {
                 Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
+                if (screenNavigator.canPop()) screenNavigator.pop();
               },
             ),
             ListTile(
               leading:
                   const CircleAvatar(child: Icon(Icons.home_rounded, size: 18)),
               title: const Text('Ir para Home'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
-              },
+              onTap: () => AppNavigator.pushWithNavBar(
+                      context, const HomeScreen())
             ),
             ListTile(
               leading: const CircleAvatar(
@@ -358,7 +369,7 @@ class _TestCustomBack extends StatelessWidget {
               title: const Text('Ir para Explorar'),
               onTap: () {
                 Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
+                _goToTab(context, ref, 1);
               },
             ),
             const SizedBox(height: 8),
