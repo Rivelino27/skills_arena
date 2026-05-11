@@ -25,7 +25,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'skills-arena-c2c71.firebasestorage.app',
   );
 
-  // TODO: rode `flutterfire configure` para gerar as opções de iOS e Web
+  // rode `flutterfire configure` para gerar as opções de iOS e Web
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'YOUR_IOS_API_KEY',
     appId: '1:492117491640:ios:f524e28eed161514c3594d',

@@ -348,13 +348,17 @@ class _PlayStatusCard extends ConsumerWidget {
           lat: result.lat,
           lng: result.lng,
           radiusKm: result.radiusKm,
+          duration: Duration(hours: result.durationHours),
         );
     res.fold(
       (f) => messenger.showSnackBar(
         SnackBar(content: Text(f.message)),
       ),
       (_) => messenger.showSnackBar(
-        const SnackBar(content: Text('Disponibilidade ativada por 24h.')),
+        SnackBar(
+          content: Text(
+              'Disponibilidade ativada por ${result.durationHours}h.'),
+        ),
       ),
     );
   }
@@ -365,7 +369,9 @@ class _MarkResult {
   final double lat;
   final double lng;
   final double radiusKm;
-  const _MarkResult(this.sport, this.lat, this.lng, this.radiusKm);
+  final int durationHours;
+  const _MarkResult(
+      this.sport, this.lat, this.lng, this.radiusKm, this.durationHours);
 }
 
 class _MarkAvailabilitySheet extends ConsumerStatefulWidget {
@@ -380,6 +386,8 @@ class _MarkAvailabilitySheetState
     extends ConsumerState<_MarkAvailabilitySheet> {
   String _sport = kSportsList.first;
   double _radius = 5;
+  // Default duration is 5h. User can pick 1-12h via slider/chips.
+  int _durationHours = 5;
   // Default to São Paulo center; user must open map for real location.
   static const double _defaultLat = -23.5505;
   static const double _defaultLng = -46.6333;
@@ -655,11 +663,41 @@ class _MarkAvailabilitySheetState
                     ))
                 .toList(),
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.schedule_rounded),
+              const SizedBox(width: 8),
+              Text('Disponível por: ${_durationHours}h',
+                  style: theme.textTheme.bodyLarge),
+            ],
+          ),
+          Slider(
+            value: _durationHours.toDouble(),
+            min: 1,
+            max: 12,
+            divisions: 11,
+            label: '${_durationHours}h',
+            onChanged: (v) =>
+                setState(() => _durationHours = v.round()),
+          ),
+          Wrap(
+            spacing: 8,
+            children: const [2, 5, 8, 12]
+                .map((h) => ChoiceChip(
+                      label: Text('${h}h'),
+                      selected: _durationHours == h,
+                      onSelected: (_) =>
+                          setState(() => _durationHours = h),
+                    ))
+                .toList(),
+          ),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: () {
-              Navigator.of(context)
-                  .pop(_MarkResult(_sport, lat, lng, _radius));
+              Navigator.of(context).pop(
+                _MarkResult(_sport, lat, lng, _radius, _durationHours),
+              );
             },
             icon: const Icon(Icons.check_rounded),
             label: const Text('Confirmar'),

@@ -151,7 +151,32 @@ class ChatRepository {
           .orderBy('lastMessageAt', descending: true)
           .limit(limit)
           .snapshots()
-          .map((s) => s.docs.map(ConversationModel.fromFirestore).toList());
+          .map((s) => s.docs
+              .map(ConversationModel.fromFirestore)
+              // Hide venue day/slot chats whose date is older than today.
+              // The chat ID encodes the date as `venue_<id>_<YYYYMMDD>_*`,
+              // so anything from before today is auto-removed from the list.
+              .where((c) => !_isExpiredVenueChat(c.id))
+              .toList());
+
+  /// Returns true when the chat ID is a venue day/slot chat from a
+  /// previous day. Today's chats and non-venue chats return false.
+  static bool _isExpiredVenueChat(String chatId) {
+    if (!chatId.startsWith('venue_')) return false;
+    final parts = chatId.split('_');
+    // venue_<id>_<YYYYMMDD>_(day|HH)  → at least 4 parts.
+    if (parts.length < 4) return false;
+    final dateStr = parts[parts.length - 2];
+    if (dateStr.length != 8) return false;
+    final yy = int.tryParse(dateStr.substring(0, 4));
+    final mm = int.tryParse(dateStr.substring(4, 6));
+    final dd = int.tryParse(dateStr.substring(6, 8));
+    if (yy == null || mm == null || dd == null) return false;
+    final chatDay = DateTime(yy, mm, dd);
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    return chatDay.isBefore(todayStart);
+  }
 
   /// Last [limit] messages, in chronological order. Fetched newest-first
   /// then reversed so the newest stays at the bottom of the chat.

@@ -248,6 +248,12 @@ class _InfoTab extends ConsumerWidget {
             label: 'Endereço',
             value: v.address!,
           ),
+        if (v.complement != null && v.complement!.isNotEmpty)
+          _InfoTile(
+            icon: Icons.note_alt_outlined,
+            label: 'Complemento',
+            value: v.complement!,
+          ),
         if (dist != null)
           _InfoTile(
             icon: Icons.near_me_rounded,
@@ -457,31 +463,99 @@ class _MuralTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Erro: $e')),
       data: (posts) {
-        if (posts.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.dynamic_feed_rounded,
-                    size: 56, color: cs.onSurfaceVariant),
-                const SizedBox(height: 12),
-                Text('Nenhuma publicação ainda.',
-                    style: TextStyle(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 4),
-                Text('Seja o primeiro a postar!',
-                    style: TextStyle(
-                        fontSize: 12, color: cs.onSurfaceVariant)),
-              ],
-            ),
-          );
-        }
-        return ListView.separated(
+        return ListView(
           padding: const EdgeInsets.all(12),
-          itemCount: posts.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => _MuralPostCard(post: posts[i]),
+          children: [
+            const _TeamsTeaser(),
+            const SizedBox(height: 12),
+            if (posts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Column(
+                  children: [
+                    Icon(Icons.dynamic_feed_rounded,
+                        size: 56, color: cs.onSurfaceVariant),
+                    const SizedBox(height: 12),
+                    Text('Nenhuma publicação ainda.',
+                        style: TextStyle(color: cs.onSurfaceVariant)),
+                    const SizedBox(height: 4),
+                    Text('Seja o primeiro a postar!',
+                        style: TextStyle(
+                            fontSize: 12, color: cs.onSurfaceVariant)),
+                  ],
+                ),
+              )
+            else
+              for (final p in posts) ...[
+                _MuralPostCard(post: p),
+                const SizedBox(height: 8),
+              ],
+          ],
         );
       },
+    );
+  }
+}
+
+/// Teaser card for the Teams feature. Premium users will be able to
+/// create / join a team for this venue. Real flow lands in a future
+/// release — this is just the entry-point UI.
+class _TeamsTeaser extends ConsumerWidget {
+  const _TeamsTeaser();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentUserProvider).valueOrNull;
+    final isPremium = (me?.isPremium ?? false) || (me?.isAdmin ?? false);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Card(
+      color: cs.secondaryContainer.withValues(alpha: 0.45),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: [
+            Icon(Icons.groups_rounded, color: cs.secondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Times',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      Icon(Icons.workspace_premium_rounded,
+                          size: 14, color: Colors.amber.shade700),
+                    ],
+                  ),
+                  Text(
+                    isPremium
+                        ? 'Crie um time ou entre em um para essa quadra. '
+                            '(Em breve.)'
+                        : 'Premium: crie ou participe de um time da quadra.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonal(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content:
+                          Text('Gestão de times chega em breve.')),
+                );
+              },
+              child: Text(isPremium ? 'Criar' : 'Saiba mais'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

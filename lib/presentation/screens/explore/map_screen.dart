@@ -24,6 +24,10 @@ import 'add_venue_screen.dart';
 import 'find_players_screen.dart';
 import 'venue_detail_screen.dart';
 
+/// What to render on the map. Controlled by the segmented toggle on
+/// the top-right (next to the count chips).
+enum _MapDisplayMode { both, venues, players }
+
 // Cor por esporte
 Color _sportColor(String sport) {
   switch (sport) {
@@ -87,6 +91,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Position? _userPosition;
   bool _loadingLocation = true;
   bool _pinMode = false;
+  // What to display on the map: venues+players (both), venues only, or
+  // players only. Affects markers and the right-side counter chips.
+  _MapDisplayMode _displayMode = _MapDisplayMode.both;
   bool _showSearch = false;
   bool _searching = false;
   List<_GeoResult> _suggestions = [];
@@ -438,49 +445,52 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ],
                 ),
               // Marcadores de quadras
-              MarkerLayer(
-                markers: filteredVenues
-                    .map((v) => Marker(
-                          point: LatLng(v.lat, v.lng),
-                          width: 44,
-                          height: 44,
-                          child: GestureDetector(
-                            onTap: () => _showVenueSheet(context, v),
-                            child: _VenueMarker(sport: v.sport),
-                          ),
-                        ))
-                    .toList(),
-              ),
+              if (_displayMode != _MapDisplayMode.players)
+                MarkerLayer(
+                  markers: filteredVenues
+                      .map((v) => Marker(
+                            point: LatLng(v.lat, v.lng),
+                            width: 44,
+                            height: 44,
+                            child: GestureDetector(
+                              onTap: () => _showVenueSheet(context, v),
+                              child: _VenueMarker(sport: v.sport),
+                            ),
+                          ))
+                      .toList(),
+                ),
               // Marcadores de jogadores
-              MarkerLayer(
-                markers: filteredPlayers
-                    .map((p) => Marker(
-                          point: LatLng(p.lat, p.lng),
-                          width: 44,
-                          height: 44,
-                          child: GestureDetector(
-                            onTap: () =>
-                                _showPlayerSheet(context, p),
-                            child: _PlayerMarker(player: p),
-                          ),
-                        ))
-                    .toList(),
-              ),
-              // Marcadores de outros usuários no mapa
-              MarkerLayer(
-                markers: filteredVisibleUsers
-                    .map((u) => Marker(
-                          point:
-                              LatLng(u.effectiveLat!, u.effectiveLng!),
-                          width: 40,
-                          height: 40,
-                          child: GestureDetector(
-                            onTap: () => _showUserSheet(context, u),
-                            child: _UserMarker(user: u),
-                          ),
-                        ))
-                    .toList(),
-              ),
+              if (_displayMode != _MapDisplayMode.venues)
+                MarkerLayer(
+                  markers: filteredPlayers
+                      .map((p) => Marker(
+                            point: LatLng(p.lat, p.lng),
+                            width: 44,
+                            height: 44,
+                            child: GestureDetector(
+                              onTap: () =>
+                                  _showPlayerSheet(context, p),
+                              child: _PlayerMarker(player: p),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              // Marcadores de outros usuários no mapa (também jogadores)
+              if (_displayMode != _MapDisplayMode.venues)
+                MarkerLayer(
+                  markers: filteredVisibleUsers
+                      .map((u) => Marker(
+                            point:
+                                LatLng(u.effectiveLat!, u.effectiveLng!),
+                            width: 40,
+                            height: 40,
+                            child: GestureDetector(
+                              onTap: () => _showUserSheet(context, u),
+                              child: _UserMarker(user: u),
+                            ),
+                          ))
+                      .toList(),
+                ),
               // Marcador do usuário
               if (_userPosition != null)
                 MarkerLayer(
@@ -540,23 +550,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _CountChip(
-                    icon: Icons.people_alt_rounded,
-                    color: cs.tertiary,
-                    label: '${filteredPlayers.length} jogador'
-                        '${filteredPlayers.length == 1 ? '' : 'es'}',
-                    onTap: () =>
-                        _showPlayersListSheet(context, filteredPlayers),
+                  _MapDisplayToggle(
+                    mode: _displayMode,
+                    onChanged: (m) => setState(() => _displayMode = m),
                   ),
                   const SizedBox(height: 8),
-                  _CountChip(
-                    icon: Icons.place_rounded,
-                    color: cs.primary,
-                    label: '${filteredVenues.length} quadra'
-                        '${filteredVenues.length == 1 ? '' : 's'}',
-                    onTap: () =>
-                        _showVenuesListSheet(context, filteredVenues),
-                  ),
+                  if (_displayMode != _MapDisplayMode.venues)
+                    _CountChip(
+                      icon: Icons.people_alt_rounded,
+                      color: cs.tertiary,
+                      label: '${filteredPlayers.length} jogador'
+                          '${filteredPlayers.length == 1 ? '' : 'es'}',
+                      onTap: () =>
+                          _showPlayersListSheet(context, filteredPlayers),
+                    ),
+                  if (_displayMode != _MapDisplayMode.venues)
+                    const SizedBox(height: 8),
+                  if (_displayMode != _MapDisplayMode.players)
+                    _CountChip(
+                      icon: Icons.place_rounded,
+                      color: cs.primary,
+                      label: '${filteredVenues.length} quadra'
+                          '${filteredVenues.length == 1 ? '' : 's'}',
+                      onTap: () =>
+                          _showVenuesListSheet(context, filteredVenues),
+                    ),
                 ],
               ),
             ),
@@ -810,6 +828,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Future<void> _confirmPin() async {
     _revGeoDebounce?.cancel();
+    // Pass the reverse-geocoded address to AddVenueScreen as the
+    // initial value, then clear local state.
+    final pinAddress = _pinAddress;
     setState(() {
       _pinMode = false;
       _pinAddress = null;
@@ -820,6 +841,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       AddVenueScreen(
         userLat: _pinPosition.latitude,
         userLng: _pinPosition.longitude,
+        initialAddress: pinAddress,
       ),
     );
     if (ok == true && mounted) {
@@ -1408,6 +1430,59 @@ class _RadiusSheet extends ConsumerWidget {
 }
 
 // ─── Counter chip ───────────────────────────────────────────────────────────
+
+/// 3-way segmented toggle that controls whether the map shows venues,
+/// players, or both. Renders compact pill icons in the top-right.
+class _MapDisplayToggle extends StatelessWidget {
+  final _MapDisplayMode mode;
+  final ValueChanged<_MapDisplayMode> onChanged;
+
+  const _MapDisplayToggle({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Widget pill(_MapDisplayMode m, IconData icon, String tip) {
+      final selected = mode == m;
+      return Tooltip(
+        message: tip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => onChanged(m),
+          child: Container(
+            width: 36,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? cs.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(icon,
+                size: 18,
+                color: selected ? cs.onPrimary : cs.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: const StadiumBorder(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            pill(_MapDisplayMode.both, Icons.layers_rounded, 'Mostrar tudo'),
+            pill(_MapDisplayMode.venues, Icons.place_rounded, 'Só quadras'),
+            pill(_MapDisplayMode.players, Icons.people_alt_rounded,
+                'Só jogadores'),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _CountChip extends StatelessWidget {
   final IconData icon;

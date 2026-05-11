@@ -6,8 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/comment_model.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../providers/post_provider.dart';
+import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
 import 'create_post_screen.dart';
 
@@ -48,6 +50,7 @@ class HomeScreen extends ConsumerWidget {
                   context,
                   UserProfileScreen(userId: posts[i].userId),
                 ),
+                onMessage: () => _openChatWithAuthor(context, ref, posts[i]),
               ),
             ),
           );
@@ -62,6 +65,36 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Opens a 1-1 chat with the post's author. Creates the conversation
+  /// if needed. Self-posts (myUid == post.userId) just go to the user's
+  /// own profile to avoid creating a chat-with-self.
+  Future<void> _openChatWithAuthor(
+      BuildContext context, WidgetRef ref, PostModel post) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (post.userId == myUid) {
+      AppNavigator.pushWithNavBar(
+          context, UserProfileScreen(userId: post.userId));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: post.userId,
+                otherName: post.userName,
+                otherPhoto: post.userPhotoUrl,
+              );
+      if (!context.mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Erro ao abrir chat: $e')));
+    }
+  }
 }
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
@@ -72,6 +105,7 @@ class _PostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onShare;
   final VoidCallback onViewProfile;
+  final VoidCallback onMessage;
 
   const _PostCard({
     required this.post,
@@ -79,6 +113,7 @@ class _PostCard extends StatelessWidget {
     required this.onLike,
     required this.onShare,
     required this.onViewProfile,
+    required this.onMessage,
   });
 
   @override
@@ -172,7 +207,7 @@ class _PostCard extends StatelessWidget {
                 icon: Icons.send_rounded,
                 label: 'Mensagem',
                 color: cs.primary,
-                onTap: onViewProfile,
+                onTap: onMessage,
               ),
             ],
           ),

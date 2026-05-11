@@ -10,8 +10,16 @@ import '../../widgets/navigation/custom_back_button.dart';
 class AddVenueScreen extends ConsumerStatefulWidget {
   final double? userLat;
   final double? userLng;
+  /// Reverse-geocoded address from the pin. Pre-fills the address field
+  /// so the user doesn't have to type it.
+  final String? initialAddress;
 
-  const AddVenueScreen({super.key, this.userLat, this.userLng});
+  const AddVenueScreen({
+    super.key,
+    this.userLat,
+    this.userLng,
+    this.initialAddress,
+  });
 
   @override
   ConsumerState<AddVenueScreen> createState() => _AddVenueScreenState();
@@ -21,14 +29,24 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _complementCtrl = TextEditingController();
   String _selectedSport = kSportsList.first;
   bool _isPublic = true;
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialAddress != null) {
+      _addressCtrl.text = widget.initialAddress!;
+    }
+  }
+
+  @override
   void dispose() {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
+    _complementCtrl.dispose();
     super.dispose();
   }
 
@@ -51,6 +69,9 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
       lat: widget.userLat!,
       lng: widget.userLng!,
       address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+      complement: _complementCtrl.text.trim().isEmpty
+          ? null
+          : _complementCtrl.text.trim(),
       addedBy: user.uid,
       addedByName: user.displayName ?? 'Usuário',
       isPublic: _isPublic,
@@ -169,14 +190,27 @@ class _AddVenueScreenState extends ConsumerState<AddVenueScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Endereço (opcional)
+                // Endereço (pré-preenchido pelo pin no mapa)
                 TextFormField(
                   controller: _addressCtrl,
-                  textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
-                    labelText: 'Endereço (opcional)',
+                    labelText: 'Endereço',
                     prefixIcon: Icon(Icons.home_outlined),
                     hintText: 'Rua, número, bairro…',
+                    helperText: 'Detectado do pin — edite se necessário',
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Complemento (referência / portão / quadra X)
+                TextFormField(
+                  controller: _complementCtrl,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Complemento (opcional)',
+                    prefixIcon: Icon(Icons.note_alt_outlined),
+                    hintText: 'Ex: Portão azul, quadra 2, atrás do mercado…',
                   ),
                 ),
                 const SizedBox(height: 20),

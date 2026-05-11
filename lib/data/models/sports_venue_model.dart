@@ -52,6 +52,9 @@ class SportsVenueModel {
   final double lat;
   final double lng;
   final String? address;
+  /// Free-form extra address note: gate, building, reference point.
+  /// Shown below the address line on the venue detail.
+  final String? complement;
   final String addedBy;
   final String addedByName;
   final bool isPublic;
@@ -72,6 +75,7 @@ class SportsVenueModel {
     required this.lat,
     required this.lng,
     this.address,
+    this.complement,
     required this.addedBy,
     required this.addedByName,
     this.isPublic = true,
@@ -93,6 +97,7 @@ class SportsVenueModel {
       lat: (data['lat'] as num).toDouble(),
       lng: (data['lng'] as num).toDouble(),
       address: data['address'] as String?,
+      complement: data['complement'] as String?,
       addedBy: data['addedBy'] as String,
       addedByName: data['addedByName'] as String,
       isPublic: data['isPublic'] as bool? ?? true,
@@ -116,6 +121,7 @@ class SportsVenueModel {
         'lat': lat,
         'lng': lng,
         'address': address,
+        if (complement != null) 'complement': complement,
         'addedBy': addedBy,
         'addedByName': addedByName,
         'isPublic': isPublic,

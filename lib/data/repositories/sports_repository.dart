@@ -105,6 +105,7 @@ class SportsRepository {
     required double lat,
     required double lng,
     required double radiusKm,
+    Duration duration = const Duration(hours: 5),
   }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -127,7 +128,7 @@ class SportsRepository {
         lat: lat,
         lng: lng,
         radiusKm: radiusKm,
-        expiresAt: now.add(const Duration(hours: 24)),
+        expiresAt: now.add(duration),
         createdAt: now,
       );
       await _availability.add(model.toMap());
