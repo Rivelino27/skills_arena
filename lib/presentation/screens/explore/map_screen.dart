@@ -107,6 +107,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   String? _pinAddress;
   bool _reverseGeocoding = false;
   Timer? _revGeoDebounce;
+  LatLngBounds? _regionBounds;
+  bool _regionSearchPending = false;
+  Timer? _regionDebounce;
 
   static const _defaultCenter = LatLng(-23.5505, -46.6333); // São Paulo
 
@@ -136,6 +139,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void dispose() {
     _debounce?.cancel();
     _revGeoDebounce?.cancel();
+    _regionDebounce?.cancel();
     _mapController.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -351,15 +355,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final selectedSport = ref.watch(selectedSportFilterProvider);
     final cs = Theme.of(context).colorScheme;
 
-    final filteredVenues = selectedSport == null
-        ? venues
-        : venues.where((v) => v.sport == selectedSport).toList();
-
-    // Use GPS first, then user's fixed address. If neither, no distance
-    // filter is applied (player markers all show).
+    // When the user has panned the map, filter by visible bounds;
+    // otherwise fall back to radius from the user's known position.
+    final bounds = _regionBounds;
     final center = _fallbackCenter();
+
+    final filteredVenues = venues.where((v) {
+      if (selectedSport != null && v.sport != selectedSport) return false;
+      if (bounds != null) return bounds.contains(LatLng(v.lat, v.lng));
+      return true;
+    }).toList();
+
     final filteredPlayers = players.where((p) {
       if (selectedSport != null && p.sport != selectedSport) return false;
+      if (bounds != null) return bounds.contains(LatLng(p.lat, p.lng));
       if (center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, p.lat, p.lng) <=
@@ -375,6 +384,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final lat = u.effectiveLat;
       final lng = u.effectiveLng;
       if (lat == null || lng == null) return false;
+      if (bounds != null) return bounds.contains(LatLng(lat, lng));
       if (center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, lat, lng) <=
@@ -423,9 +433,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   : (_fallbackCenter() ?? _defaultCenter),
               initialZoom: widget.initialZoom ?? 13.0,
               onMapEvent: (event) {
-                if (_pinMode && event is MapEventMove) {
-                  setState(() => _pinPosition = event.camera.center);
-                  _reverseGeocode(event.camera.center);
+                if (event is MapEventMove) {
+                  if (_pinMode) {
+                    setState(() => _pinPosition = event.camera.center);
+                    _reverseGeocode(event.camera.center);
+                  } else {
+                    _regionDebounce?.cancel();
+                    if (!_regionSearchPending) {
+                      setState(() => _regionSearchPending = true);
+                    }
+                    _regionDebounce = Timer(const Duration(seconds: 2), () {
+                      if (!mounted) return;
+                      setState(() {
+                        _regionBounds =
+                            _mapController.camera.visibleBounds;
+                        _regionSearchPending = false;
+                      });
+                    });
+                  }
                 }
               },
             ),
@@ -548,6 +573,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                       const SizedBox(width: 8),
                       const Text('Obtendo localização…'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (_regionSearchPending && !_loadingLocation && !_pinMode)
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: cs.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Buscando na região…'),
                     ],
                   ),
                 ),
@@ -1129,6 +1178,37 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      try {
+                        final myUid =
+                            FirebaseAuth.instance.currentUser?.uid ?? '';
+                        final conv = await ref
+                            .read(chatRepositoryProvider)
+                            .getOrCreateConversation(
+                              otherUid: user.id,
+                              otherName: user.name ?? 'Usuário',
+                              otherPhoto: user.photoUrl,
+                            );
+                        if (context.mounted) {
+                          AppNavigator.pushWithNavBar(
+                            context,
+                            ConversationScreen(
+                                chatId: conv.id,
+                                conv: conv,
+                                myUid: myUid),
+                          );
+                        }
+                      } catch (_) {}
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('Mensagem'),
+                  ),
                 ),
               ],
             ),

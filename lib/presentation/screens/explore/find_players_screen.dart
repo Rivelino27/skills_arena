@@ -6,11 +6,14 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/player_availability_model.dart';
 import '../../../data/models/sports_venue_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../data/repositories/chat_repository.dart';
-import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/mark_availability_sheet.dart';
+import '../../widgets/user_badge.dart';
 import '../chat/conversation_screen.dart';
+import '../profile/user_profile_screen.dart';
 
 /// Tela de busca de jogadores — com bottom nav bar visível (pushWithNavBar).
 class FindPlayersScreen extends ConsumerStatefulWidget {
@@ -23,13 +26,62 @@ class FindPlayersScreen extends ConsumerStatefulWidget {
   ConsumerState<FindPlayersScreen> createState() => _FindPlayersScreenState();
 }
 
-class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
+class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen>
+    with SingleTickerProviderStateMixin {
   String? _sportFilter;
+  late TabController _tabCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final allPlayers =
-        ref.watch(availabilityStreamProvider).valueOrNull ?? [];
+    final radius = ref.watch(mapRadiusProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Buscar Jogadores'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: 'Raio de busca',
+            onPressed: () => _showRadiusSheet(context, ref, radius),
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabCtrl,
+          tabs: const [
+            Tab(icon: Icon(Icons.sports_score_rounded), text: 'Querem jogar'),
+            Tab(icon: Icon(Icons.people_rounded), text: 'Localização fixa'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: [
+          _buildPlayersTab(context),
+          _buildFixedUsersTab(context),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showMarkAvailabilityAndApply(context, ref),
+        icon: const Icon(Icons.sports_rounded),
+        label: const Text('Quero jogar'),
+      ),
+    );
+  }
+
+  Widget _buildPlayersTab(BuildContext context) {
+    final allPlayers = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
     final radius = ref.watch(mapRadiusProvider);
     final me = ref.watch(currentUserProvider).valueOrNull;
     final blocked = me?.blockedUsers ?? const <String>[];
@@ -43,7 +95,7 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
       if (_sportFilter != null && p.sport != _sportFilter) return false;
       if (widget.userLat != null && widget.userLng != null) {
         return GeoUtils.distanceKm(
-              widget.userLat!, widget.userLng!, p.lat, p.lng) <=
+                widget.userLat!, widget.userLng!, p.lat, p.lng) <=
             radius;
       }
       return true;
@@ -57,89 +109,216 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
         return da.compareTo(db);
       });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Buscar Jogadores'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: 'Raio de busca',
-            onPressed: () => _showRadiusSheet(context, ref, radius),
+    return Column(
+      children: [
+        SizedBox(
+          height: 56,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: const Text('Todos'),
+                  selected: _sportFilter == null,
+                  onSelected: (_) => setState(() => _sportFilter = null),
+                ),
+              ),
+              ...kSportsList.map((s) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(s),
+                      selected: _sportFilter == s,
+                      onSelected: (_) => setState(
+                        () => _sportFilter = _sportFilter == s ? null : s,
+                      ),
+                    ),
+                  )),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Filtro de esporte
-          SizedBox(
-            height: 56,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: const Text('Todos'),
-                    selected: _sportFilter == null,
-                    onSelected: (_) => setState(() => _sportFilter = null),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              Icon(Icons.radar_rounded, size: 16, color: cs.primary),
+              const SizedBox(width: 4),
+              Text(
+                'Raio: ${radius.toStringAsFixed(0)} km  •  '
+                '${players.length} jogador(es) encontrado(s)',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: players.isEmpty
+              ? _EmptyState(
+                  sport: _sportFilter,
+                  hasLocation: widget.userLat != null,
+                  onMark: () => showMarkAvailabilityAndApply(context, ref),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: players.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _PlayerCard(
+                    player: players[i],
+                    userLat: widget.userLat,
+                    userLng: widget.userLng,
+                    onChat: () => _openChatWith(players[i]),
                   ),
                 ),
-                ...kSportsList.map((s) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(s),
-                        selected: _sportFilter == s,
-                        onSelected: (_) => setState(
-                          () => _sportFilter = _sportFilter == s ? null : s,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFixedUsersTab(BuildContext context) {
+    final allUsers = ref.watch(visibleUsersStreamProvider).valueOrNull ?? [];
+    final radius = ref.watch(mapRadiusProvider);
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final users = allUsers.where((u) {
+      if (u.id == myUid) return false;
+      final lat = u.effectiveLat;
+      final lng = u.effectiveLng;
+      if (lat == null || lng == null) return false;
+      if (widget.userLat != null && widget.userLng != null) {
+        return GeoUtils.distanceKm(
+                widget.userLat!, widget.userLng!, lat, lng) <=
+            radius;
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) {
+        if (widget.userLat == null) return 0;
+        final da = GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
+            a.effectiveLat!, a.effectiveLng!);
+        final db = GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
+            b.effectiveLat!, b.effectiveLng!);
+        return da.compareTo(db);
+      });
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.radar_rounded, size: 16, color: cs.secondary),
+              const SizedBox(width: 4),
+              Text(
+                'Raio: ${radius.toStringAsFixed(0)} km  •  '
+                '${users.length} jogador(es) fixo(s)',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: users.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.people_outline_rounded,
+                            size: 64, color: cs.onSurfaceVariant),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Nenhum jogador com localização fixa nas proximidades',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleMedium,
                         ),
-                      ),
-                    )),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Icon(Icons.radar_rounded, size: 16, color: cs.primary),
-                const SizedBox(width: 4),
-                Text(
-                  'Raio: ${radius.toStringAsFixed(0)} km  •  '
-                  '${players.length} jogador(es) encontrado(s)',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: players.isEmpty
-                ? _EmptyState(
-                    sport: _sportFilter,
-                    hasLocation: widget.userLat != null,
-                    onMark: () => _showMarkAvailabilitySheet(context, ref),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: players.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) => _PlayerCard(
-                      player: players[i],
-                      userLat: widget.userLat,
-                      userLng: widget.userLng,
-                      onChat: () => _openChatWith(players[i]),
+                      ],
                     ),
                   ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showMarkAvailabilitySheet(context, ref),
-        icon: const Icon(Icons.sports_rounded),
-        label: const Text('Quero jogar'),
-      ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: users.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(height: 1, indent: 72),
+                  itemBuilder: (_, i) {
+                    final u = users[i];
+                    final dist =
+                        (widget.userLat != null && widget.userLng != null)
+                            ? GeoUtils.distanceKm(widget.userLat!,
+                                widget.userLng!, u.effectiveLat!, u.effectiveLng!)
+                            : null;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundImage: u.photoUrl != null
+                            ? NetworkImage(u.photoUrl!)
+                            : null,
+                        backgroundColor: cs.primaryContainer,
+                        child: u.photoUrl == null
+                            ? Text(
+                                (u.name ?? 'U').isNotEmpty
+                                    ? (u.name ?? 'U')[0].toUpperCase()
+                                    : '?',
+                                style:
+                                    TextStyle(color: cs.onPrimaryContainer),
+                              )
+                            : null,
+                      ),
+                      title: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              u.name ?? 'Usuário',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          UserBadge(user: u),
+                        ],
+                      ),
+                      subtitle: Text(
+                        dist != null
+                            ? GeoUtils.formatDistance(dist)
+                            : (u.username != null
+                                ? '@${u.username}'
+                                : u.email),
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                                Icons.chat_bubble_outline_rounded),
+                            tooltip: 'Enviar mensagem',
+                            onPressed: () => _openChatWithUser(u),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Icon(Icons.arrow_forward_ios_rounded,
+                              size: 14, color: cs.onSurfaceVariant),
+                        ],
+                      ),
+                      onTap: () => AppNavigator.pushWithNavBar(
+                          context, UserProfileScreen(userId: u.id)),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -163,32 +342,32 @@ class _FindPlayersScreenState extends ConsumerState<FindPlayersScreen> {
     }
   }
 
+  Future<void> _openChatWithUser(UserModel u) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: u.id,
+                otherName: u.name ?? 'Usuário',
+                otherPhoto: u.photoUrl,
+              );
+      if (!mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
+  }
+
   void _showRadiusSheet(BuildContext context, WidgetRef ref, double current) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => _RadiusSheet(currentRadius: current),
-    );
-  }
-
-  void _showMarkAvailabilitySheet(BuildContext context, WidgetRef ref) {
-    if (widget.userLat == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Ative o GPS para marcar sua localização.')),
-      );
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _MarkAvailabilitySheet(
-        userLat: widget.userLat!,
-        userLng: widget.userLng!,
-      ),
     );
   }
 }
@@ -270,8 +449,8 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.people_outline_rounded, size: 64,
-                color: cs.onSurfaceVariant),
+            Icon(Icons.people_outline_rounded,
+                size: 64, color: cs.onSurfaceVariant),
             const SizedBox(height: 16),
             Text(
               sport != null
@@ -296,116 +475,6 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _MarkAvailabilitySheet extends ConsumerStatefulWidget {
-  final double userLat;
-  final double userLng;
-
-  const _MarkAvailabilitySheet({
-    required this.userLat,
-    required this.userLng,
-  });
-
-  @override
-  ConsumerState<_MarkAvailabilitySheet> createState() =>
-      _MarkAvailabilitySheetState();
-}
-
-class _MarkAvailabilitySheetState
-    extends ConsumerState<_MarkAvailabilitySheet> {
-  String _sport = kSportsList.first;
-  bool _loading = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = ref.watch(mapRadiusProvider);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: cs.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Quero jogar agora!',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(
-            'Sua disponibilidade ficará visível por 24 horas '
-            'para jogadores no raio de ${radius.toStringAsFixed(0)} km.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 20),
-          DropdownButtonFormField<String>(
-            initialValue: _sport,
-            decoration: const InputDecoration(
-              labelText: 'Esporte',
-              prefixIcon: Icon(Icons.sports_rounded),
-            ),
-            items: kSportsList
-                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                .toList(),
-            onChanged: (v) => setState(() => _sport = v!),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _loading ? null : _confirm,
-            icon: _loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.check_rounded),
-            label: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirm() async {
-    setState(() => _loading = true);
-    final radius = ref.read(mapRadiusProvider);
-    final result =
-        await ref.read(sportsRepositoryProvider).markAvailability(
-              sport: _sport,
-              lat: widget.userLat,
-              lng: widget.userLng,
-              radiusKm: radius,
-            );
-    if (!mounted) return;
-    setState(() => _loading = false);
-    result.fold(
-      (f) => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(f.message),
-              backgroundColor: Theme.of(context).colorScheme.error)),
-      (_) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Você está disponível para jogar! (24h)')),
-        );
-      },
     );
   }
 }
