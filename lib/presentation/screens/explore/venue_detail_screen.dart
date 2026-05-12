@@ -337,19 +337,34 @@ class _OccupancySectionState extends ConsumerState<_OccupancySection> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final v = widget.venue;
-    final color = _colorFor(v.occupancy, cs);
     final updated = v.occupancyUpdatedAt;
+    // The status resets every midnight: anything updated before today
+    // is treated as "unknown" so users don't see stale data. The actual
+    // last-update time is still shown to everyone (per request).
+    final now = DateTime.now();
+    final isStale = updated == null ||
+        updated.isBefore(DateTime(now.year, now.month, now.day));
+    final effectiveOccupancy =
+        isStale ? VenueOccupancy.unknown : v.occupancy;
+    final color = _colorFor(effectiveOccupancy, cs);
 
     String? updatedLabel() {
       if (updated == null) return null;
-      final diff = DateTime.now().difference(updated);
-      if (diff.inMinutes < 1) return 'agora há pouco';
-      if (diff.inHours < 1) return 'há ${diff.inMinutes}min';
-      if (diff.inDays < 1) return 'há ${diff.inHours}h';
-      return '${updated.day.toString().padLeft(2, '0')}/'
-          '${updated.month.toString().padLeft(2, '0')} '
-          '${updated.hour.toString().padLeft(2, '0')}:'
+      // Always show the exact HH:mm so everyone sees the last reported
+      // time even after the status itself has expired.
+      final sameDay = updated.year == now.year &&
+          updated.month == now.month &&
+          updated.day == now.day;
+      final hh = '${updated.hour.toString().padLeft(2, '0')}:'
           '${updated.minute.toString().padLeft(2, '0')}';
+      if (sameDay) {
+        final diff = now.difference(updated);
+        if (diff.inMinutes < 1) return 'agora há pouco ($hh)';
+        if (diff.inHours < 1) return 'há ${diff.inMinutes}min ($hh)';
+        return 'hoje às $hh';
+      }
+      return '${updated.day.toString().padLeft(2, '0')}/'
+          '${updated.month.toString().padLeft(2, '0')} às $hh';
     }
 
     return Card(
@@ -360,7 +375,7 @@ class _OccupancySectionState extends ConsumerState<_OccupancySection> {
           children: [
             Row(
               children: [
-                Icon(_iconFor(v.occupancy), color: color),
+                Icon(_iconFor(effectiveOccupancy), color: color),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -370,10 +385,12 @@ class _OccupancySectionState extends ConsumerState<_OccupancySection> {
                           style: theme.textTheme.titleSmall
                               ?.copyWith(fontWeight: FontWeight.bold)),
                       Text(
-                        v.occupancy == VenueOccupancy.unknown
-                            ? 'Sem atualização recente.'
-                            : '${v.occupancy.label}'
-                                '${updatedLabel() != null ? ' • atualizado ${updatedLabel()}' : ''}',
+                        effectiveOccupancy == VenueOccupancy.unknown
+                            ? (updated == null
+                                ? 'Sem atualização recente.'
+                                : 'Sem atualização hoje • última: ${updatedLabel()}')
+                            : '${effectiveOccupancy.label}'
+                                '${updatedLabel() != null ? ' • ${updatedLabel()}' : ''}',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.onSurfaceVariant),
                       ),
@@ -391,21 +408,21 @@ class _OccupancySectionState extends ConsumerState<_OccupancySection> {
                   label: 'Vazio',
                   icon: Icons.sentiment_very_satisfied_rounded,
                   color: Colors.green,
-                  selected: v.occupancy == VenueOccupancy.empty,
+                  selected: effectiveOccupancy == VenueOccupancy.empty,
                   onTap: _saving ? null : () => _set(VenueOccupancy.empty),
                 ),
                 _OccupancyChip(
                   label: 'Poucas pessoas',
                   icon: Icons.groups_2_rounded,
                   color: Colors.orange,
-                  selected: v.occupancy == VenueOccupancy.few,
+                  selected: effectiveOccupancy == VenueOccupancy.few,
                   onTap: _saving ? null : () => _set(VenueOccupancy.few),
                 ),
                 _OccupancyChip(
                   label: 'Cheio',
                   icon: Icons.groups_rounded,
                   color: Colors.red,
-                  selected: v.occupancy == VenueOccupancy.full,
+                  selected: effectiveOccupancy == VenueOccupancy.full,
                   onTap: _saving ? null : () => _set(VenueOccupancy.full),
                 ),
               ],

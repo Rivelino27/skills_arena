@@ -181,9 +181,16 @@ class _VenueTile extends StatelessWidget {
         ? null
         : GeoUtils.distanceKm(userLat!, userLng!, venue.lat, venue.lng);
 
-    final occLabel = venue.occupancy == VenueOccupancy.unknown
+    // Occupancy expires at midnight — same rule as the venue detail.
+    final updated = venue.occupancyUpdatedAt;
+    final now = DateTime.now();
+    final isStale = updated == null ||
+        updated.isBefore(DateTime(now.year, now.month, now.day));
+    final effectiveOccupancy =
+        isStale ? VenueOccupancy.unknown : venue.occupancy;
+    final occLabel = effectiveOccupancy == VenueOccupancy.unknown
         ? null
-        : venue.occupancy.label;
+        : effectiveOccupancy.label;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -215,14 +222,14 @@ class _VenueTile extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _occColor(venue.occupancy)
+                  color: _occColor(effectiveOccupancy)
                       .withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   occLabel,
                   style: TextStyle(
-                    color: _occColor(venue.occupancy),
+                    color: _occColor(effectiveOccupancy),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),

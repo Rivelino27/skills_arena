@@ -129,6 +129,20 @@ class PostRepository {
     }
   }
 
+  Future<Either<AppFailure, Unit>> deletePost(String postId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Não autenticado.'));
+      }
+      await _posts.doc(postId).delete();
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao apagar publicação.'));
+    }
+  }
+
   Future<Either<AppFailure, Unit>> deleteComment({
     required String postId,
     required String commentId,

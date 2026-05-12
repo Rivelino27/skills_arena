@@ -51,6 +51,7 @@ class HomeScreen extends ConsumerWidget {
                   UserProfileScreen(userId: posts[i].userId),
                 ),
                 onMessage: () => _openChatWithAuthor(context, ref, posts[i]),
+                onDelete: () => _confirmDeletePost(context, ref, posts[i].id),
               ),
             ),
           );
@@ -62,6 +63,39 @@ class HomeScreen extends ConsumerWidget {
             AppNavigator.pushWithNavBar(context, const CreatePostScreen()),
         tooltip: 'Nova publicação',
         child: const Icon(Icons.add_rounded),
+      ),
+    );
+  }
+
+  /// Shows a confirmation dialog then deletes the post. Firestore rules
+  /// already enforce that only the author can delete.
+  Future<void> _confirmDeletePost(
+      BuildContext context, WidgetRef ref, String postId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Apagar publicação?'),
+        content: const Text(
+            'Esta ação não pode ser desfeita. Comentários e curtidas serão removidos junto.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Apagar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final res =
+        await ref.read(postRepositoryProvider).deletePost(postId);
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) => messenger.showSnackBar(
+        const SnackBar(content: Text('Publicação apagada.')),
       ),
     );
   }
@@ -106,6 +140,7 @@ class _PostCard extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onViewProfile;
   final VoidCallback onMessage;
+  final VoidCallback onDelete;
 
   const _PostCard({
     required this.post,
@@ -114,6 +149,7 @@ class _PostCard extends StatelessWidget {
     required this.onShare,
     required this.onViewProfile,
     required this.onMessage,
+    required this.onDelete,
   });
 
   @override
@@ -167,6 +203,27 @@ class _PostCard extends StatelessWidget {
                   ),
                 ),
                 _PostTypeBadge(type: post.type),
+                if (post.userId == myUid)
+                  PopupMenuButton<String>(
+                    tooltip: 'Mais opções',
+                    icon: Icon(Icons.more_vert_rounded,
+                        size: 20, color: cs.onSurfaceVariant),
+                    onSelected: (v) {
+                      if (v == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.delete_outline_rounded,
+                              color: Colors.red),
+                          title: Text('Apagar publicação'),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),

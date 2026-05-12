@@ -16,17 +16,22 @@ import '../../../data/models/sports_venue_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/social_repository.dart';
+import '../../../data/repositories/sports_repository.dart';
 import '../../providers/sports_provider.dart';
 import '../../providers/user_provider.dart';
 import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
+import '../../widgets/mark_availability_sheet.dart';
 import 'add_venue_screen.dart';
-import 'find_players_screen.dart';
 import 'venue_detail_screen.dart';
 
 /// What to render on the map. Controlled by the segmented toggle on
-/// the top-right (next to the count chips).
-enum _MapDisplayMode { both, venues, players }
+/// the top-right (next to the count chips). 4 modes:
+///   - all: venues + fixed-address users + players (querem jogar hoje)
+///   - venues: only sports_venues markers
+///   - fixedUsers: only users with `visibleOnMap=true` and a fixed addr
+///   - players: only players who marked "Querem jogar hoje"
+enum _MapDisplayMode { all, venues, fixedUsers, players }
 
 // Cor por esporte
 Color _sportColor(String sport) {
@@ -93,7 +98,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _pinMode = false;
   // What to display on the map: venues+players (both), venues only, or
   // players only. Affects markers and the right-side counter chips.
-  _MapDisplayMode _displayMode = _MapDisplayMode.both;
+  _MapDisplayMode _displayMode = _MapDisplayMode.all;
   bool _showSearch = false;
   bool _searching = false;
   List<_GeoResult> _suggestions = [];
@@ -445,7 +450,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ],
                 ),
               // Marcadores de quadras
-              if (_displayMode != _MapDisplayMode.players)
+              // Quadras — visíveis nos modos 'all' e 'venues'.
+              if (_displayMode == _MapDisplayMode.all ||
+                  _displayMode == _MapDisplayMode.venues)
                 MarkerLayer(
                   markers: filteredVenues
                       .map((v) => Marker(
@@ -459,8 +466,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ))
                       .toList(),
                 ),
-              // Marcadores de jogadores
-              if (_displayMode != _MapDisplayMode.venues)
+              // Jogadores que marcaram "Quero jogar hoje" — visíveis
+              // nos modos 'all' e 'players'.
+              if (_displayMode == _MapDisplayMode.all ||
+                  _displayMode == _MapDisplayMode.players)
                 MarkerLayer(
                   markers: filteredPlayers
                       .map((p) => Marker(
@@ -475,8 +484,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ))
                       .toList(),
                 ),
-              // Marcadores de outros usuários no mapa (também jogadores)
-              if (_displayMode != _MapDisplayMode.venues)
+              // Usuários com endereço fixo (visibleOnMap) — visíveis
+              // nos modos 'all' e 'fixedUsers'.
+              if (_displayMode == _MapDisplayMode.all ||
+                  _displayMode == _MapDisplayMode.fixedUsers)
                 MarkerLayer(
                   markers: filteredVisibleUsers
                       .map((u) => Marker(
@@ -555,18 +566,32 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     onChanged: (m) => setState(() => _displayMode = m),
                   ),
                   const SizedBox(height: 8),
-                  if (_displayMode != _MapDisplayMode.venues)
+                  if (_displayMode == _MapDisplayMode.all ||
+                      _displayMode == _MapDisplayMode.players) ...[
                     _CountChip(
-                      icon: Icons.people_alt_rounded,
+                      icon: Icons.sports_score_rounded,
                       color: cs.tertiary,
-                      label: '${filteredPlayers.length} jogador'
-                          '${filteredPlayers.length == 1 ? '' : 'es'}',
+                      label: '${filteredPlayers.length} querem jogar'
+                          '${filteredPlayers.length == 1 ? '' : ''}',
                       onTap: () =>
                           _showPlayersListSheet(context, filteredPlayers),
                     ),
-                  if (_displayMode != _MapDisplayMode.venues)
                     const SizedBox(height: 8),
-                  if (_displayMode != _MapDisplayMode.players)
+                  ],
+                  if (_displayMode == _MapDisplayMode.all ||
+                      _displayMode == _MapDisplayMode.fixedUsers) ...[
+                    _CountChip(
+                      icon: Icons.people_alt_rounded,
+                      color: cs.secondary,
+                      label: '${filteredVisibleUsers.length} jogador'
+                          '${filteredVisibleUsers.length == 1 ? '' : 'es'} fixo'
+                          '${filteredVisibleUsers.length == 1 ? '' : 's'}',
+                      onTap: null,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (_displayMode == _MapDisplayMode.all ||
+                      _displayMode == _MapDisplayMode.venues)
                     _CountChip(
                       icon: Icons.place_rounded,
                       color: cs.primary,
@@ -773,19 +798,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   child: const Icon(Icons.my_location_rounded),
                 ),
                 const SizedBox(height: 8),
-                FloatingActionButton.small(
-                  heroTag: 'find_players',
-                  tooltip: 'Buscar jogadores',
-                  backgroundColor: cs.tertiary,
-                  foregroundColor: cs.onTertiary,
-                  onPressed: () => AppNavigator.pushWithNavBar(
-                    context,
-                    FindPlayersScreen(
-                      userLat: _userPosition?.latitude,
-                      userLng: _userPosition?.longitude,
-                    ),
-                  ),
-                  child: const Icon(Icons.people_alt_rounded),
+                // "Quero jogar" toggle. Reads from myAvailabilityProvider
+                // so it stays in sync with the Explore tab card.
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    final myAvail =
+                        ref.watch(myAvailabilityProvider).valueOrNull;
+                    final active = myAvail != null;
+                    return FloatingActionButton.extended(
+                      heroTag: 'quero_jogar',
+                      backgroundColor:
+                          active ? Colors.green : cs.tertiary,
+                      foregroundColor:
+                          active ? Colors.white : cs.onTertiary,
+                      icon: Icon(active
+                          ? Icons.sports_score_rounded
+                          : Icons.sports_rounded),
+                      label: Text(active
+                          ? 'Disponível • ${myAvail.sport}'
+                          : 'Quero jogar'),
+                      onPressed: () => _toggleAvailability(ref, active),
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 FloatingActionButton(
@@ -797,6 +831,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ],
             ),
     );
+  }
+
+  /// Opens the same "Quero jogar" sheet used on the Explore tab when
+  /// currently inactive, or removes the availability when active.
+  /// `myAvailabilityProvider` is the shared source of truth so both
+  /// the Explore card and this FAB stay in sync.
+  Future<void> _toggleAvailability(WidgetRef ref, bool active) async {
+    if (active) {
+      final messenger = ScaffoldMessenger.of(context);
+      await ref.read(sportsRepositoryProvider).removeAvailability();
+      await ref
+          .read(socialRepositoryProvider)
+          .setVisibleOnMap(visible: false);
+      if (!mounted) return;
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Você não está mais disponível.')));
+    } else {
+      await showMarkAvailabilityAndApply(context, ref);
+    }
   }
 
   void _centerOnUser() {
@@ -1473,10 +1526,12 @@ class _MapDisplayToggle extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            pill(_MapDisplayMode.both, Icons.layers_rounded, 'Mostrar tudo'),
+            pill(_MapDisplayMode.all, Icons.layers_rounded, 'Mostrar tudo'),
             pill(_MapDisplayMode.venues, Icons.place_rounded, 'Só quadras'),
-            pill(_MapDisplayMode.players, Icons.people_alt_rounded,
-                'Só jogadores'),
+            pill(_MapDisplayMode.fixedUsers, Icons.people_alt_rounded,
+                'Locais fixos de usuários'),
+            pill(_MapDisplayMode.players, Icons.sports_score_rounded,
+                'Querem jogar hoje'),
           ],
         ),
       ),
@@ -1488,7 +1543,7 @@ class _CountChip extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _CountChip({
     required this.icon,

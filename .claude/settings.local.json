@@ -8,7 +8,8 @@
       "Read(//c/Users/TD48/AppData/Local/Pub/Cache/hosted/pub.dev/**)",
       "Bash(gh repo *)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell($f = \"lib\\\\presentation\\\\screens\\\\explore\\\\explore_screen.dart\"; $lines = Get-Content $f; $before = $lines[0..288]; $after = $lines[632..\\($lines.Count - 1\\)]; \\($before + $after\\) | Set-Content $f -Encoding utf8; \"lines now: \" + \\(Get-Content $f\\).Count)"
     ]
   }
 }
