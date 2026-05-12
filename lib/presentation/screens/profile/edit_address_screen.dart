@@ -301,7 +301,7 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
       final address = parts.join(', ');
       if (address.isNotEmpty) {
         _ctrl.text = address;
-        _fetch(address);
+        _fetch(address, autoSelect: true);
       } else {
         setState(() => _searching = false);
       }
@@ -310,7 +310,7 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
     }
   }
 
-  Future<void> _fetch(String query) async {
+  Future<void> _fetch(String query, {bool autoSelect = false}) async {
     setState(() => _searching = true);
     try {
       final client = HttpClient();
@@ -330,15 +330,17 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
       client.close();
       if (!mounted) return;
       final list = jsonDecode(body) as List<dynamic>;
+      final results = list.map((e) {
+        final m = e as Map<String, dynamic>;
+        return _GeoResult(
+          displayName: m['display_name'] as String,
+          lat: double.parse(m['lat'] as String),
+          lon: double.parse(m['lon'] as String),
+        );
+      }).toList();
       setState(() {
-        _suggestions = list.map((e) {
-          final m = e as Map<String, dynamic>;
-          return _GeoResult(
-            displayName: m['display_name'] as String,
-            lat: double.parse(m['lat'] as String),
-            lon: double.parse(m['lon'] as String),
-          );
-        }).toList();
+        _suggestions = results;
+        if (autoSelect && results.isNotEmpty) _selected = results.first;
         _searching = false;
       });
     } catch (_) {

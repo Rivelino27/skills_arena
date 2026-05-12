@@ -364,16 +364,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final bounds = _regionBounds;
     final center = _fallbackCenter();
 
+    const double globalRadius = 60.0;
+
     final filteredVenues = venues.where((v) {
       if (selectedSport != null && v.sport != selectedSport) return false;
-      if (bounds != null) return bounds.contains(LatLng(v.lat, v.lng));
+      if (bounds != null && !globalSearch) {
+        return bounds.contains(LatLng(v.lat, v.lng));
+      }
+      if (globalSearch) {
+        if (center == null) return true;
+        return GeoUtils.distanceKm(
+                center.latitude, center.longitude, v.lat, v.lng) <=
+            globalRadius;
+      }
       return true;
     }).toList();
 
     final filteredPlayers = players.where((p) {
       if (selectedSport != null && p.sport != selectedSport) return false;
-      if (bounds != null) return bounds.contains(LatLng(p.lat, p.lng));
-      if (globalSearch || center == null) return true;
+      if (bounds != null && !globalSearch) {
+        return bounds.contains(LatLng(p.lat, p.lng));
+      }
+      if (globalSearch) {
+        if (center == null) return true;
+        return GeoUtils.distanceKm(
+                center.latitude, center.longitude, p.lat, p.lng) <=
+            globalRadius;
+      }
+      if (center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, p.lat, p.lng) <=
           radius;
@@ -388,8 +406,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final lat = u.effectiveLat;
       final lng = u.effectiveLng;
       if (lat == null || lng == null) return false;
-      if (bounds != null) return bounds.contains(LatLng(lat, lng));
-      if (globalSearch || center == null) return true;
+      if (bounds != null && !globalSearch) {
+        return bounds.contains(LatLng(lat, lng));
+      }
+      if (globalSearch) {
+        if (center == null) return true;
+        return GeoUtils.distanceKm(
+                center.latitude, center.longitude, lat, lng) <=
+            globalRadius;
+      }
+      if (center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, lat, lng) <=
           radius;
@@ -532,18 +558,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ))
                       .toList(),
                 ),
-              // Marcador do usuário
-              if (_userPosition != null)
+              // Marcador do usuário (GPS ou endereço fixo)
+              if (_fallbackCenter() != null)
                 MarkerLayer(
                   markers: [
                     Marker(
-                      point: LatLng(
-                          _userPosition!.latitude, _userPosition!.longitude),
+                      point: _fallbackCenter()!,
                       width: 48,
                       height: 48,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: cs.primary,
+                          color: _userPosition != null
+                              ? cs.primary
+                              : cs.secondaryContainer,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
                           boxShadow: const [
@@ -551,8 +578,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 color: Colors.black26, blurRadius: 6)
                           ],
                         ),
-                        child: const Icon(Icons.person,
-                            color: Colors.white, size: 22),
+                        child: Icon(
+                          _userPosition != null
+                              ? Icons.person
+                              : Icons.home_rounded,
+                          color: _userPosition != null
+                              ? Colors.white
+                              : cs.onSecondaryContainer,
+                          size: 22,
+                        ),
                       ),
                     ),
                   ],
@@ -883,6 +917,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   onPressed: _enterPinMode,
                   child: const Icon(Icons.add_location_alt_rounded),
                 ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
+                  heroTag: 'ranking',
+                  tooltip: 'Ranking',
+                  onPressed: () => _showTopRankingSheet(
+                      context,
+                      filteredPlayers,
+                      filteredVenues,
+                      filteredVisibleUsers),
+                  child: const Icon(Icons.star_rounded),
+                ),
               ],
             ),
     );
@@ -905,6 +950,204 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     } else {
       await showMarkAvailabilityAndApply(context, ref);
     }
+  }
+
+  void _showTopRankingSheet(
+    BuildContext context,
+    List<PlayerAvailabilityModel> players,
+    List<SportsVenueModel> venues,
+    List<UserModel> visibleUsers,
+  ) {
+    // Build uid→followersCount lookup from visibleUsers
+    final followerMap = {for (final u in visibleUsers) u.id: u.followersCount};
+
+    // Top players: sort by followersCount desc
+    final topPlayers = [...players]
+      ..sort((a, b) => (followerMap[b.userId] ?? 0)
+          .compareTo(followerMap[a.userId] ?? 0));
+
+    // Top venues: verified first, then by createdAt desc
+    final topVenues = [...venues]
+      ..sort((a, b) {
+        if (a.isVerified != b.isVerified) {
+          return a.isVerified ? -1 : 1;
+        }
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          builder: (_, scrollCtrl) => DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 4),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.star_rounded,
+                          color: Colors.amber, size: 20),
+                      const SizedBox(width: 6),
+                      Text('Ranking da busca',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                TabBar(
+                  tabs: [
+                    Tab(
+                      icon: const Icon(Icons.sports_rounded, size: 18),
+                      text: 'Jogadores (${topPlayers.length})',
+                    ),
+                    Tab(
+                      icon: const Icon(Icons.place_rounded, size: 18),
+                      text: 'Quadras (${topVenues.length})',
+                    ),
+                  ],
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      // ── Players tab ──
+                      topPlayers.isEmpty
+                          ? Center(
+                              child: Text('Nenhum jogador na área.',
+                                  style: TextStyle(
+                                      color: cs.onSurfaceVariant)))
+                          : ListView.separated(
+                              controller: scrollCtrl,
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8),
+                              itemCount: topPlayers.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1, indent: 64),
+                              itemBuilder: (_, i) {
+                                final p = topPlayers[i];
+                                final followers =
+                                    followerMap[p.userId] ?? 0;
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundImage:
+                                        p.userPhotoUrl != null
+                                            ? NetworkImage(p.userPhotoUrl!)
+                                            : null,
+                                    backgroundColor: cs.primaryContainer,
+                                    child: p.userPhotoUrl == null
+                                        ? Text(
+                                            p.userName.isNotEmpty
+                                                ? p.userName[0].toUpperCase()
+                                                : '?',
+                                            style: TextStyle(
+                                                color:
+                                                    cs.onPrimaryContainer),
+                                          )
+                                        : null,
+                                  ),
+                                  title: Text(p.userName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                  subtitle: Text(p.sport),
+                                  trailing: followers > 0
+                                      ? Chip(
+                                          avatar: const Icon(
+                                              Icons.group_rounded,
+                                              size: 14),
+                                          label: Text('$followers'),
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize
+                                                  .shrinkWrap,
+                                          padding: EdgeInsets.zero,
+                                          labelStyle: const TextStyle(
+                                              fontSize: 12),
+                                        )
+                                      : null,
+                                  onTap: () {
+                                    Navigator.of(ctx).pop();
+                                    _showPlayerSheet(context, p);
+                                  },
+                                );
+                              },
+                            ),
+                      // ── Venues tab ──
+                      topVenues.isEmpty
+                          ? Center(
+                              child: Text('Nenhuma quadra na área.',
+                                  style: TextStyle(
+                                      color: cs.onSurfaceVariant)))
+                          : ListView.separated(
+                              controller: scrollCtrl,
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8),
+                              itemCount: topVenues.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1, indent: 64),
+                              itemBuilder: (_, i) {
+                                final v = topVenues[i];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        _sportColor(v.sport)
+                                            .withValues(alpha: 0.2),
+                                    child: Icon(_sportIcon(v.sport),
+                                        color: _sportColor(v.sport),
+                                        size: 20),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Expanded(
+                                          child: Text(v.name,
+                                              style: const TextStyle(
+                                                  fontWeight:
+                                                      FontWeight.w600))),
+                                      if (v.isVerified)
+                                                            const Icon(
+                                            Icons.verified_rounded,
+                                            size: 16,
+                                            color: Colors.blue),
+                                    ],
+                                  ),
+                                  subtitle: Text(v.sport),
+                                  onTap: () {
+                                    Navigator.of(ctx).pop();
+                                    _animateTo(LatLng(v.lat, v.lng));
+                                    _showVenueSheet(context, v);
+                                  },
+                                );
+                              },
+                            ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _centerOnUser() {
@@ -1590,8 +1833,8 @@ class _RadiusSheet extends ConsumerWidget {
           Slider(
             value: radius,
             min: 1,
-            max: 50,
-            divisions: 49,
+            max: 60,
+            divisions: 59,
             label: '${radius.toStringAsFixed(0)} km',
             onChanged: globalSearch
                 ? null
@@ -1604,7 +1847,7 @@ class _RadiusSheet extends ConsumerWidget {
               Text('1 km',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: cs.onSurfaceVariant)),
-              Text('50 km',
+              Text('60 km',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: cs.onSurfaceVariant)),
             ],
