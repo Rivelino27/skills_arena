@@ -1,5 +1,17 @@
 Falta arrumar / incluir:
 
+Arrume, ao digitar cep para cadastrar endereço / local, fica o endereço no form, mas não tem como adicioanr ele, deve sempre ter como adiconar o endereço.
+
+Ao mover um pouco o mapa, mesmo com a busca global ativada some da listagem os jogadores e locais encontrados, eles devem aparecer na busca global ativada, deve aapliar muitoa area de busca e ficar mostrando.
+
+Não aparece mais o meu icone de localização do user no mapa.
+
+No mapa deve ter um icone de extrela e ao clicar nele carregar a listagem dos jogadores melhores avalizados e com mais seguidores no topo e as quadras / locais com mais likes e melhor avalizadas da busca global.
+
+Aumwentar a busca global para 60 km.
+
+<< fixed:
+
 Em home as vezes em tocar no usuario do post, não abre a pagina do user e só clicando mais uma vez abre.
 
 Em explorar no acesso rapido mostrar a listagem de quadras e jogadores direto ao clicar nela, e clicando na quadra da lista abrir o local no mapa, e no user a mensagem.
