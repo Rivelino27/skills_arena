@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/repositories/chat_repository.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/sports_provider.dart';
 import '../../widgets/user_badge.dart';
+import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
 
 enum _UsersFilter { all, verified, premium, topRated, wantingToday }
@@ -318,6 +320,7 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
                               context,
                               UserProfileScreen(userId: u.id),
                             ),
+                            onMessage: () => _openChatWith(u),
                           );
                         },
                       ),
@@ -327,6 +330,25 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _openChatWith(UserModel u) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final conv = await ref.read(chatRepositoryProvider).getOrCreateConversation(
+            otherUid: u.id,
+            otherName: u.name ?? 'Usuário',
+            otherPhoto: u.photoUrl,
+          );
+      if (!mounted) return;
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
   }
 
   void _showRadiusSheet(BuildContext context) {
@@ -383,12 +405,14 @@ class _UserTile extends StatelessWidget {
   final double? distanceKm;
   final String? sportTodayLabel;
   final VoidCallback onTap;
+  final VoidCallback? onMessage;
 
   const _UserTile({
     required this.user,
     this.distanceKm,
     this.sportTodayLabel,
     required this.onTap,
+    this.onMessage,
   });
 
   @override
@@ -443,8 +467,20 @@ class _UserTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Icon(Icons.arrow_forward_ios_rounded,
-          size: 14, color: cs.onSurfaceVariant),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onMessage != null)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              tooltip: 'Enviar mensagem',
+              onPressed: onMessage,
+              visualDensity: VisualDensity.compact,
+            ),
+          Icon(Icons.arrow_forward_ios_rounded,
+              size: 14, color: cs.onSurfaceVariant),
+        ],
+      ),
       onTap: onTap,
     );
   }
