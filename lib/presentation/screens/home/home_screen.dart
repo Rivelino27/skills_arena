@@ -635,11 +635,14 @@ class _CommentsSheet extends ConsumerStatefulWidget {
 
 class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   final _ctrl = TextEditingController();
+  final _inputFocus = FocusNode();
   bool _sending = false;
+  CommentModel? _replyingTo;
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -648,9 +651,14 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     if (text.isEmpty) return;
     setState(() => _sending = true);
     _ctrl.clear();
-    await ref
-        .read(postRepositoryProvider)
-        .addComment(postId: widget.post.id, text: text);
+    final replyTo = _replyingTo;
+    setState(() => _replyingTo = null);
+    await ref.read(postRepositoryProvider).addComment(
+          postId: widget.post.id,
+          text: text,
+          replyToId: replyTo?.id,
+          replyToName: replyTo?.userName,
+        );
     if (mounted) setState(() => _sending = false);
   }
 
@@ -706,6 +714,10 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                     comment: comments[i],
                     postId: widget.post.id,
                     myUid: widget.myUid,
+                    onReply: () {
+                      setState(() => _replyingTo = comments[i]);
+                      _inputFocus.requestFocus();
+                    },
                   ),
                 );
               },
@@ -713,7 +725,36 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
           ),
           // Input
           SafeArea(
-            child: Container(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_replyingTo != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    color: cs.surfaceContainerHighest,
+                    child: Row(
+                      children: [
+                        Icon(Icons.reply_rounded,
+                            size: 14, color: cs.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Respondendo a ${_replyingTo!.userName}',
+                            style: TextStyle(
+                                fontSize: 12, color: cs.primary),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _replyingTo = null),
+                          child: Icon(Icons.close_rounded,
+                              size: 16, color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+              Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -726,6 +767,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                   Expanded(
                     child: TextField(
                       controller: _ctrl,
+                      focusNode: _inputFocus,
                       decoration: InputDecoration(
                         hintText: 'Escreva um comentário...',
                         filled: true,
@@ -755,7 +797,9 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                 ],
               ),
             ),
-          ),
+          ],
+        ),
+      ),
         ],
       ),
     );
@@ -766,11 +810,13 @@ class _CommentTile extends ConsumerWidget {
   final CommentModel comment;
   final String postId;
   final String myUid;
+  final VoidCallback? onReply;
 
   const _CommentTile({
     required this.comment,
     required this.postId,
     required this.myUid,
+    this.onReply,
   });
 
   @override
@@ -785,23 +831,34 @@ class _CommentTile extends ConsumerWidget {
     final isMe = comment.userId == myUid;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.only(
+          top: 6, bottom: 6, left: comment.isReply ? 32 : 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (comment.isReply)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 6),
+              child: Icon(Icons.subdirectory_arrow_right_rounded,
+                  size: 14, color: cs.onSurfaceVariant),
+            ),
           CircleAvatar(
-            radius: 16,
+            radius: comment.isReply ? 13 : 16,
             backgroundImage: comment.userPhotoUrl != null
                 ? NetworkImage(comment.userPhotoUrl!)
                 : null,
             backgroundColor: cs.primaryContainer,
             child: comment.userPhotoUrl == null
-                ? Text(comment.userName.isNotEmpty
-                    ? comment.userName[0].toUpperCase()
-                    : '?')
+                ? Text(
+                    comment.userName.isNotEmpty
+                        ? comment.userName[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                        fontSize: comment.isReply ? 10 : 12),
+                  )
                 : null,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -809,9 +866,9 @@ class _CommentTile extends ConsumerWidget {
                 Row(
                   children: [
                     Text(comment.userName,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 13)),
+                            fontSize: comment.isReply ? 12 : 13)),
                     const SizedBox(width: 6),
                     Text(time,
                         style: TextStyle(
@@ -820,8 +877,34 @@ class _CommentTile extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text(comment.text,
-                    style: const TextStyle(fontSize: 14)),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).textTheme.bodyMedium?.color),
+                    children: [
+                      if (comment.replyToName != null)
+                        TextSpan(
+                          text: '@${comment.replyToName} ',
+                          style: TextStyle(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      TextSpan(text: comment.text),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: onReply,
+                  child: Text(
+                    'Responder',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
               ],
             ),
           ),
@@ -830,19 +913,15 @@ class _CommentTile extends ConsumerWidget {
               iconSize: 18,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              icon: Icon(Icons.delete_outline_rounded,
-                  color: cs.error),
+              icon: Icon(Icons.delete_outline_rounded, color: cs.error),
               tooltip: 'Apagar comentário',
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 await ref
                     .read(postRepositoryProvider)
-                    .deleteComment(
-                        postId: postId,
-                        commentId: comment.id);
+                    .deleteComment(postId: postId, commentId: comment.id);
                 messenger.showSnackBar(
-                  const SnackBar(
-                      content: Text('Comentário apagado.')),
+                  const SnackBar(content: Text('Comentário apagado.')),
                 );
               },
             ),

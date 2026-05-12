@@ -7,6 +7,8 @@ class CommentModel {
   final String? userPhotoUrl;
   final String text;
   final DateTime createdAt;
+  final String? replyToId;
+  final String? replyToName;
 
   const CommentModel({
     required this.id,
@@ -15,7 +17,11 @@ class CommentModel {
     this.userPhotoUrl,
     required this.text,
     required this.createdAt,
+    this.replyToId,
+    this.replyToName,
   });
+
+  bool get isReply => replyToId != null;
 
   factory CommentModel.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
@@ -26,6 +32,8 @@ class CommentModel {
       userPhotoUrl: d['userPhotoUrl'] as String?,
       text: d['text'] as String,
       createdAt: (d['createdAt'] as Timestamp).toDate(),
+      replyToId: d['replyToId'] as String?,
+      replyToName: d['replyToName'] as String?,
     );
   }
 
@@ -35,5 +43,7 @@ class CommentModel {
         'userPhotoUrl': userPhotoUrl,
         'text': text,
         'createdAt': Timestamp.fromDate(createdAt),
+        if (replyToId != null) 'replyToId': replyToId,
+        if (replyToName != null) 'replyToName': replyToName,
       };
 }

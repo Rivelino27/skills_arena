@@ -262,12 +262,52 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
 
   void _onChanged(String q) {
     _debounce?.cancel();
+    final digits = q.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 8) {
+      _debounce =
+          Timer(const Duration(milliseconds: 300), () => _fetchCep(digits));
+      return;
+    }
     if (q.trim().length < 3) {
       setState(() => _suggestions = []);
       return;
     }
     _debounce =
         Timer(const Duration(milliseconds: 400), () => _fetch(q));
+  }
+
+  Future<void> _fetchCep(String cep) async {
+    setState(() => _searching = true);
+    try {
+      final client = HttpClient();
+      final uri = Uri.https('viacep.com.br', '/ws/$cep/json/');
+      final req = await client.getUrl(uri);
+      req.headers.set(HttpHeaders.userAgentHeader, 'SkillsArena/1.0');
+      final res = await req.close();
+      final body = await res.transform(const Utf8Decoder()).join();
+      client.close();
+      if (!mounted) return;
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      if (data.containsKey('erro')) {
+        setState(() => _searching = false);
+        return;
+      }
+      final parts = [
+        data['logradouro'] as String? ?? '',
+        data['bairro'] as String? ?? '',
+        data['localidade'] as String? ?? '',
+        data['uf'] as String? ?? '',
+      ].where((s) => s.isNotEmpty);
+      final address = parts.join(', ');
+      if (address.isNotEmpty) {
+        _ctrl.text = address;
+        _fetch(address);
+      } else {
+        setState(() => _searching = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
   }
 
   Future<void> _fetch(String query) async {
@@ -358,7 +398,7 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
               onChanged: _onChanged,
               decoration: InputDecoration(
                 labelText: 'Buscar endereço',
-                hintText: 'Rua, bairro, cidade…',
+                hintText: 'Rua, bairro, cidade ou CEP…',
                 prefixIcon: _searching
                     ? const Padding(
                         padding: EdgeInsets.all(12),

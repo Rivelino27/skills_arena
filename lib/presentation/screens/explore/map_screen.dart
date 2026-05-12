@@ -1077,6 +1077,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      showMarkAvailabilityAndApply(context, ref);
+                    },
+                    icon: const Icon(Icons.sports_rounded, size: 18),
+                    label: const Text('Quero jogar aqui'),
+                  ),
+                ),
               ],
             ),
           ),

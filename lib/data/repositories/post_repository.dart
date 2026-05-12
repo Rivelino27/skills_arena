@@ -118,6 +118,8 @@ class PostRepository {
   Future<Either<AppFailure, Unit>> addComment({
     required String postId,
     required String text,
+    String? replyToId,
+    String? replyToName,
   }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -131,6 +133,8 @@ class PostRepository {
         userPhotoUrl: user.photoURL,
         text: text.trim(),
         createdAt: DateTime.now(),
+        replyToId: replyToId,
+        replyToName: replyToName,
       );
       final batch = _db.batch();
       batch.set(
