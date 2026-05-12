@@ -322,6 +322,49 @@ class ChatRepository {
     await batch.commit();
   }
 
+  /// Toggles a reaction on a message. A user can only carry one
+  /// reaction per message — tapping a different emoji moves it instead
+  /// of stacking. Tapping the same emoji removes it.
+  Future<void> toggleReaction({
+    required String chatId,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final ref = _chats.doc(chatId).collection('messages').doc(messageId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      final raw = (data['reactions'] as Map<String, dynamic>? ?? const {});
+      final reactions = raw.map<String, List<String>>(
+        (k, v) =>
+            MapEntry(k, List<String>.from(v as List? ?? const [])),
+      );
+      // Remove this uid from any other emoji first (one reaction per
+      // user per message).
+      String? hadEmoji;
+      for (final e in reactions.entries) {
+        if (e.value.contains(uid)) {
+          hadEmoji = e.key;
+          break;
+        }
+      }
+      if (hadEmoji != null) {
+        reactions[hadEmoji] = [...reactions[hadEmoji]!]..remove(uid);
+        if (reactions[hadEmoji]!.isEmpty) {
+          reactions.remove(hadEmoji);
+        }
+      }
+      // Add the new one if it differs from what was there.
+      if (hadEmoji != emoji) {
+        reactions[emoji] = [...(reactions[emoji] ?? const []), uid];
+      }
+      tx.update(ref, {'reactions': reactions});
+    });
+  }
+
   /// Marks the conversation as read for the current user (now).
   Future<void> markAsRead(String chatId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;

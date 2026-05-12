@@ -5,19 +5,246 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/models/user_model.dart';
 import '../../../data/repositories/social_repository.dart';
 import '../../providers/user_provider.dart';
 
-/// Lets the user pick a fixed home/work address. Searched via Nominatim.
-/// Saved coords are then used as the public pin location for the user.
-class EditAddressScreen extends ConsumerStatefulWidget {
+/// Lets the user manage their address book: up to 20 saved addresses
+/// (Casa, Trabalho, Faculdade…), pick one as active for map searches,
+/// or remove. The active address mirrors into the legacy `address`
+/// fields on the user doc.
+class EditAddressScreen extends ConsumerWidget {
   const EditAddressScreen({super.key});
 
   @override
-  ConsumerState<EditAddressScreen> createState() => _EditAddressScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final userAsync = ref.watch(currentUserProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Meus endereços')),
+      body: userAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Erro: $e')),
+        data: (user) {
+          final addresses = user?.addresses ?? const <SavedAddress>[];
+          final activeId = user?.activeAddressId;
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 16, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Seus endereços de busca no mapa. ${addresses.length}/$kMaxSavedAddresses cadastrados.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: addresses.isEmpty
+                    ? _Empty(
+                        onAdd: () => _openAdd(context),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: addresses.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, indent: 64),
+                        itemBuilder: (_, i) {
+                          final a = addresses[i];
+                          final isActive = a.id == activeId;
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: isActive
+                                  ? cs.primary
+                                  : cs.surfaceContainerHighest,
+                              child: Icon(
+                                isActive
+                                    ? Icons.check_rounded
+                                    : Icons.location_on_outlined,
+                                color: isActive
+                                    ? cs.onPrimary
+                                    : cs.onSurfaceVariant,
+                              ),
+                            ),
+                            title: Text(
+                              a.label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: isActive ? cs.primary : null,
+                              ),
+                            ),
+                            subtitle: Text(
+                              a.address,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              tooltip: 'Opções',
+                              icon: Icon(Icons.more_vert_rounded,
+                                  color: cs.onSurfaceVariant),
+                              onSelected: (v) {
+                                if (v == 'activate') {
+                                  ref
+                                      .read(socialRepositoryProvider)
+                                      .setActiveAddress(a.id);
+                                } else if (v == 'delete') {
+                                  _confirmDelete(context, ref, a);
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (!isActive)
+                                  const PopupMenuItem(
+                                    value: 'activate',
+                                    child: ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      leading:
+                                          Icon(Icons.radio_button_checked),
+                                      title: Text('Tornar ativo'),
+                                    ),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: Colors.red),
+                                    title: Text('Remover'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            onTap: isActive
+                                ? null
+                                : () => ref
+                                    .read(socialRepositoryProvider)
+                                    .setActiveAddress(a.id),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: userAsync.maybeWhen(
+        data: (u) {
+          final canAdd =
+              (u?.addresses.length ?? 0) < kMaxSavedAddresses;
+          return FloatingActionButton.extended(
+            onPressed: canAdd ? () => _openAdd(context) : null,
+            icon: const Icon(Icons.add_location_alt_rounded),
+            label: const Text('Adicionar endereço'),
+          );
+        },
+        orElse: () => const SizedBox.shrink(),
+      ),
+    );
+  }
+
+  Future<void> _openAdd(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const _AddAddressScreen()),
+    );
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    SavedAddress a,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover endereço?'),
+        content: Text(
+            'Tem certeza que deseja remover "${a.label}"? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(socialRepositoryProvider).removeSavedAddress(a.id);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Endereço removido.')),
+    );
+  }
 }
 
-class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
+class _Empty extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _Empty({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.location_on_outlined,
+                size: 64, color: cs.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              'Nenhum endereço cadastrado',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Adicione endereços (Casa, Trabalho…) para alternar entre eles na busca do mapa.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_location_alt_rounded),
+              label: const Text('Adicionar primeiro endereço'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddAddressScreen extends ConsumerStatefulWidget {
+  const _AddAddressScreen();
+
+  @override
+  ConsumerState<_AddAddressScreen> createState() => _AddAddressScreenState();
+}
+
+class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
+  final _labelCtrl = TextEditingController(text: 'Casa');
   final _ctrl = TextEditingController();
   Timer? _debounce;
   bool _searching = false;
@@ -26,24 +253,9 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
   _GeoResult? _selected;
 
   @override
-  void initState() {
-    super.initState();
-    final me = ref.read(currentUserProvider).valueOrNull;
-    if (me?.address != null) {
-      _ctrl.text = me!.address!;
-      if (me.addressLat != null && me.addressLng != null) {
-        _selected = _GeoResult(
-          displayName: me.address!,
-          lat: me.addressLat!,
-          lon: me.addressLng!,
-        );
-      }
-    }
-  }
-
-  @override
   void dispose() {
     _debounce?.cancel();
+    _labelCtrl.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -96,71 +308,52 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
 
   Future<void> _save() async {
     if (_selected == null) return;
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
-    await ref.read(socialRepositoryProvider).setFixedAddress(
-          address: _selected!.displayName,
-          lat: _selected!.lat,
-          lng: _selected!.lon,
-        );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Endereço salvo.')),
-    );
-    Navigator.of(context).pop();
-  }
-
-  Future<void> _clear() async {
-    setState(() => _saving = true);
-    await ref.read(socialRepositoryProvider).setFixedAddress();
-    if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _selected = null;
-      _ctrl.clear();
-      _suggestions = [];
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Endereço removido.')),
-    );
+    try {
+      await ref.read(socialRepositoryProvider).addSavedAddress(
+            label: _labelCtrl.text,
+            address: _selected!.displayName,
+            lat: _selected!.lat,
+            lng: _selected!.lon,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Endereço salvo.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final me = ref.watch(currentUserProvider).valueOrNull;
-    final hasSaved = me?.address != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meu endereço'),
-        actions: [
-          if (hasSaved)
-            IconButton(
-              tooltip: 'Remover endereço',
-              icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: _saving ? null : _clear,
-            ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Novo endereço')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Outros usuários verão sua localização aproximada com base '
-              'neste endereço fixo. A localização real do GPS só é '
-              'compartilhada dentro de uma conversa, e somente se você '
-              'autorizar.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: cs.onSurfaceVariant),
+            TextField(
+              controller: _labelCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Nome do endereço',
+                hintText: 'Casa, Trabalho, Faculdade…',
+                prefixIcon: Icon(Icons.bookmark_outline_rounded),
+                border: OutlineInputBorder(),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             TextField(
               controller: _ctrl,
-              autofocus: true,
               textInputAction: TextInputAction.search,
               onChanged: _onChanged,
               decoration: InputDecoration(
@@ -221,11 +414,9 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              hasSaved
-                                  ? 'Endereço salvo'
-                                  : 'Endereço selecionado',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                  color: cs.onPrimaryContainer),
+                              'Endereço selecionado',
+                              style: theme.textTheme.labelMedium
+                                  ?.copyWith(color: cs.onPrimaryContainer),
                             ),
                             Text(
                               _selected!.displayName,
@@ -233,13 +424,6 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
                                   color: cs.onPrimaryContainer),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${_selected!.lat.toStringAsFixed(5)}, '
-                              '${_selected!.lon.toStringAsFixed(5)}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: cs.onPrimaryContainer),
                             ),
                           ],
                         ),
@@ -252,8 +436,7 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
             ] else
               const Spacer(),
             FilledButton.icon(
-              onPressed:
-                  (_selected == null || _saving) ? null : _save,
+              onPressed: (_selected == null || _saving) ? null : _save,
               icon: _saving
                   ? const SizedBox(
                       width: 18,

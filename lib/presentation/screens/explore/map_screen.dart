@@ -118,8 +118,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.initState();
     if (widget.initialSportFilter != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(selectedSportFilterProvider.notifier).state =
-            widget.initialSportFilter;
+        ref
+            .read(selectedSportFilterProvider.notifier)
+            .setSport(widget.initialSportFilter);
       });
     }
     // If caller passed an explicit center, jump there once the map mounts
@@ -353,10 +354,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
     final radius = ref.watch(mapRadiusProvider);
     final selectedSport = ref.watch(selectedSportFilterProvider);
+    final globalSearch = ref.watch(globalSearchProvider);
     final cs = Theme.of(context).colorScheme;
 
     // When the user has panned the map, filter by visible bounds;
     // otherwise fall back to radius from the user's known position.
+    // Global search mode bypasses the radius and shows everything (or
+    // everything inside the visible bounds when the user panned).
     final bounds = _regionBounds;
     final center = _fallbackCenter();
 
@@ -369,7 +373,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final filteredPlayers = players.where((p) {
       if (selectedSport != null && p.sport != selectedSport) return false;
       if (bounds != null) return bounds.contains(LatLng(p.lat, p.lng));
-      if (center == null) return true;
+      if (globalSearch || center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, p.lat, p.lng) <=
           radius;
@@ -385,7 +389,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final lng = u.effectiveLng;
       if (lat == null || lng == null) return false;
       if (bounds != null) return bounds.contains(LatLng(lat, lng));
-      if (center == null) return true;
+      if (globalSearch || center == null) return true;
       return GeoUtils.distanceKm(
               center.latitude, center.longitude, lat, lng) <=
           radius;
@@ -417,8 +421,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           preferredSize: const Size.fromHeight(44),
           child: _SportFilterBar(
             selected: selectedSport,
-            onChanged: (s) =>
-                ref.read(selectedSportFilterProvider.notifier).state = s,
+            onChanged: (s) => ref
+                .read(selectedSportFilterProvider.notifier)
+                .setSport(s),
           ),
         ),
       ),
@@ -460,7 +465,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.r27systems.skills_arena',
               ),
-              if (_userPosition != null)
+              if (_userPosition != null && !globalSearch)
                 CircleLayer(
                   circles: [
                     CircleMarker(
@@ -635,7 +640,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       label: '${filteredVisibleUsers.length} jogador'
                           '${filteredVisibleUsers.length == 1 ? '' : 'es'} fixo'
                           '${filteredVisibleUsers.length == 1 ? '' : 's'}',
-                      onTap: null,
+                      onTap: () => _showFixedUsersListSheet(
+                          context, filteredVisibleUsers),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1359,6 +1365,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
   }
+
+  void _showFixedUsersListSheet(
+      BuildContext context, List<UserModel> users) {
+    final center = _fallbackCenter();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => _FixedUsersListSheet(
+        users: users,
+        userLat: center?.latitude,
+        userLng: center?.longitude,
+        onCenterOnMap: (u) {
+          Navigator.of(sheetCtx).pop();
+          if (u.effectiveLat != null && u.effectiveLng != null) {
+            _animateTo(LatLng(u.effectiveLat!, u.effectiveLng!));
+          }
+        },
+      ),
+    );
+  }
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -1511,30 +1539,41 @@ class _RadiusSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final radius = ref.watch(mapRadiusProvider);
+    final globalSearch = ref.watch(globalSearchProvider);
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.outlineVariant,
-              borderRadius: BorderRadius.circular(2),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('Raio de busca',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Center(
+            child: Text('Raio de busca',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+          ),
           const SizedBox(height: 4),
-          Text(
-            '${radius.toStringAsFixed(0)} km',
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(color: theme.colorScheme.primary),
+          Center(
+            child: Text(
+              globalSearch
+                  ? 'Busca global ativada'
+                  : '${radius.toStringAsFixed(0)} km',
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(color: cs.primary),
+            ),
           ),
           Slider(
             value: radius,
@@ -1542,19 +1581,32 @@ class _RadiusSheet extends ConsumerWidget {
             max: 50,
             divisions: 49,
             label: '${radius.toStringAsFixed(0)} km',
-            onChanged: (v) =>
-                ref.read(mapRadiusProvider.notifier).state = v,
+            onChanged: globalSearch
+                ? null
+                : (v) =>
+                    ref.read(mapRadiusProvider.notifier).state = v,
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('1 km',
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      ?.copyWith(color: cs.onSurfaceVariant)),
               Text('50 km',
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      ?.copyWith(color: cs.onSurfaceVariant)),
             ],
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: Icon(Icons.public_rounded, color: cs.primary),
+            title: const Text('Busca global'),
+            subtitle: const Text(
+                'Ignora o raio e mostra tudo. Pode encontrar mais quadras, jogadores e usuários.'),
+            value: globalSearch,
+            onChanged: (v) =>
+                ref.read(globalSearchProvider.notifier).state = v,
           ),
         ],
       ),
@@ -2024,6 +2076,169 @@ class _VenuesListSheet extends StatelessWidget {
                           trailing: const Icon(
                               Icons.chevron_right_rounded),
                           onTap: () => onTapVenue(v),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Fixed users list sheet ───────────────────────────────────────────────
+
+/// Same UX as `_PlayersListSheet` but for users with a fixed address
+/// (visibleOnMap=true). Tapping opens a 1-1 chat; the trailing icon
+/// centers the map on the user's pin.
+class _FixedUsersListSheet extends ConsumerWidget {
+  final List<UserModel> users;
+  final double? userLat;
+  final double? userLng;
+  final ValueChanged<UserModel> onCenterOnMap;
+
+  const _FixedUsersListSheet({
+    required this.users,
+    required this.onCenterOnMap,
+    this.userLat,
+    this.userLng,
+  });
+
+  Future<void> _openChat(BuildContext context, WidgetRef ref, UserModel u) async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final conv =
+          await ref.read(chatRepositoryProvider).getOrCreateConversation(
+                otherUid: u.id,
+                otherName: u.name ?? 'Usuário',
+                otherPhoto: u.photoUrl,
+              );
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      AppNavigator.pushWithNavBar(
+        context,
+        ConversationScreen(chatId: conv.id, conv: conv, myUid: myUid),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Erro: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final sorted = [...users];
+    if (userLat != null && userLng != null) {
+      sorted.sort((a, b) {
+        final da = (a.effectiveLat == null || a.effectiveLng == null)
+            ? double.infinity
+            : GeoUtils.distanceKm(
+                userLat!, userLng!, a.effectiveLat!, a.effectiveLng!);
+        final db = (b.effectiveLat == null || b.effectiveLng == null)
+            ? double.infinity
+            : GeoUtils.distanceKm(
+                userLat!, userLng!, b.effectiveLat!, b.effectiveLng!);
+        return da.compareTo(db);
+      });
+    }
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      minChildSize: 0.3,
+      builder: (_, scrollCtrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.people_alt_rounded, color: cs.secondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Jogadores fixos na área (${sorted.length})',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                'Toque para conversar.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+            const Divider(height: 16),
+            Expanded(
+              child: sorted.isEmpty
+                  ? Center(
+                      child: Text('Ninguém com local fixo por aqui.',
+                          style: TextStyle(color: cs.onSurfaceVariant)),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: sorted.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 76),
+                      itemBuilder: (_, i) {
+                        final u = sorted[i];
+                        final dist = (userLat == null ||
+                                userLng == null ||
+                                u.effectiveLat == null ||
+                                u.effectiveLng == null)
+                            ? null
+                            : GeoUtils.distanceKm(userLat!, userLng!,
+                                u.effectiveLat!, u.effectiveLng!);
+                        final name = u.name ?? 'Usuário';
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: u.photoUrl != null
+                                ? NetworkImage(u.photoUrl!)
+                                : null,
+                            backgroundColor: cs.primaryContainer,
+                            child: u.photoUrl == null
+                                ? Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                        color: cs.onPrimaryContainer),
+                                  )
+                                : null,
+                          ),
+                          title: Text(name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            dist != null
+                                ? GeoUtils.formatDistance(dist)
+                                : (u.username != null
+                                    ? '@${u.username}'
+                                    : u.email),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(
+                                Icons.center_focus_strong_rounded),
+                            tooltip: 'Centralizar no mapa',
+                            onPressed: () => onCenterOnMap(u),
+                          ),
+                          onTap: () => _openChat(context, ref, u),
                         );
                       },
                     ),

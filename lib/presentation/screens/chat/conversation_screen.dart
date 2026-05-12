@@ -178,6 +178,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   itemBuilder: (_, i) => _Bubble(
                     msg: msgs[i],
                     isMe: msgs[i].senderId == widget.myUid,
+                    myUid: widget.myUid,
+                    chatId: widget.chatId,
+                    onReact: (emoji) => ref
+                        .read(chatRepositoryProvider)
+                        .toggleReaction(
+                          chatId: widget.chatId,
+                          messageId: msgs[i].id,
+                          emoji: emoji,
+                        ),
                     showName: msgs.length > 1 &&
                         i > 0 &&
                         msgs[i].senderId != msgs[i - 1].senderId,
@@ -202,10 +211,74 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 class _Bubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
+  final String myUid;
+  final String chatId;
+  final ValueChanged<String> onReact;
   final bool showName;
 
-  const _Bubble(
-      {required this.msg, required this.isMe, this.showName = false});
+  const _Bubble({
+    required this.msg,
+    required this.isMe,
+    required this.myUid,
+    required this.chatId,
+    required this.onReact,
+    this.showName = false,
+  });
+
+  Future<void> _showReactionPicker(BuildContext context) async {
+    final myReaction = msg.reactionFor(myUid);
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: kReactionEmojis.map((e) {
+                  final selected = e == myReaction;
+                  return InkResponse(
+                    onTap: () => Navigator.of(ctx).pop(e),
+                    radius: 28,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? Theme.of(ctx)
+                                .colorScheme
+                                .primaryContainer
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(e, style: const TextStyle(fontSize: 26)),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) onReact(picked);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,77 +288,134 @@ class _Bubble extends StatelessWidget {
 
     final isLocation =
         msg.type == MessageType.location && msg.lat != null && msg.lng != null;
+    final hasReactions = msg.reactions.isNotEmpty;
+    final myReaction = msg.reactionFor(myUid);
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.72),
-        decoration: BoxDecoration(
-          color: isMe ? cs.primary : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMe ? 18 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 18),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: isMe
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            if (isLocation) ...[
-              Row(
-                mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment:
+            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onLongPress: () => _showReactionPicker(context),
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 9),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.72),
+              decoration: BoxDecoration(
+                color: isMe ? cs.primary : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(isMe ? 18 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 18),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isMe
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.location_on_rounded,
-                      color: isMe ? cs.onPrimary : cs.primary, size: 18),
-                  const SizedBox(width: 4),
+                  if (isLocation) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.location_on_rounded,
+                            color: isMe ? cs.onPrimary : cs.primary,
+                            size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Localização',
+                          style: TextStyle(
+                            color: isMe ? cs.onPrimary : cs.onSurface,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    FilledButton.tonalIcon(
+                      onPressed: () => AppNavigator.pushWithNavBar(
+                        context,
+                        MapScreen(
+                          initialLat: msg.lat,
+                          initialLng: msg.lng,
+                          initialZoom: 16.0,
+                        ),
+                      ),
+                      icon: const Icon(Icons.map_rounded, size: 16),
+                      label: const Text('Ver no mapa'),
+                    ),
+                  ] else
+                    Text(
+                      msg.text,
+                      style: TextStyle(
+                          color: isMe ? cs.onPrimary : cs.onSurface,
+                          fontSize: 15),
+                    ),
+                  const SizedBox(height: 2),
                   Text(
-                    'Localização',
+                    time,
                     style: TextStyle(
-                      color: isMe ? cs.onPrimary : cs.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      color: (isMe ? cs.onPrimary : cs.onSurfaceVariant)
+                          .withValues(alpha: 0.7),
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              FilledButton.tonalIcon(
-                onPressed: () => AppNavigator.pushWithNavBar(
-                  context,
-                  MapScreen(
-                    initialLat: msg.lat,
-                    initialLng: msg.lng,
-                    initialZoom: 16.0,
-                  ),
-                ),
-                icon: const Icon(Icons.map_rounded, size: 16),
-                label: const Text('Ver no mapa'),
-              ),
-            ] else
-              Text(
-                msg.text,
-                style: TextStyle(
-                    color: isMe ? cs.onPrimary : cs.onSurface,
-                    fontSize: 15),
-              ),
-            const SizedBox(height: 2),
-            Text(
-              time,
-              style: TextStyle(
-                color: (isMe ? cs.onPrimary : cs.onSurfaceVariant)
-                    .withValues(alpha: 0.7),
-                fontSize: 11,
+            ),
+          ),
+          if (hasReactions)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
+              child: Wrap(
+                spacing: 4,
+                children: msg.reactions.entries.map((e) {
+                  final isMine = e.key == myReaction;
+                  return InkWell(
+                    onTap: () => onReact(e.key),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isMine
+                            ? cs.primaryContainer
+                            : cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isMine
+                              ? cs.primary.withValues(alpha: 0.5)
+                              : cs.outlineVariant,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(e.key,
+                              style: const TextStyle(fontSize: 14)),
+                          if (e.value.length > 1) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value.length}',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

@@ -13,49 +13,63 @@ import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
 import 'create_post_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final postsAsync = ref.watch(postsStreamProvider);
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Skills Arena')),
-      body: postsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erro: $e')),
-        data: (posts) {
-          if (posts.isEmpty) {
-            return _EmptyFeed(
-              onPost: () => AppNavigator.pushWithNavBar(
-                  context, const CreatePostScreen()),
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(postsStreamProvider),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 80),
-              itemCount: posts.length,
-              itemBuilder: (_, i) => _PostCard(
-                post: posts[i],
-                myUid: myUid,
-                onLike: () => ref
-                    .read(postRepositoryProvider)
-                    .toggleLike(posts[i].id, myUid),
-                onShare: () =>
-                    ref.read(postRepositoryProvider).sharePost(posts[i]),
-                onViewProfile: () => AppNavigator.pushWithNavBar(
-                  context,
-                  UserProfileScreen(userId: posts[i].userId),
-                ),
-                onMessage: () => _openChatWithAuthor(context, ref, posts[i]),
-                onDelete: () => _confirmDeletePost(context, ref, posts[i].id),
-              ),
-            ),
-          );
-        },
+      appBar: AppBar(
+        title: const Text('Skills Arena'),
+        bottom: TabBar(
+          controller: _tabCtrl,
+          tabs: const [
+            Tab(icon: Icon(Icons.public_rounded), text: 'Global'),
+            Tab(icon: Icon(Icons.group_rounded), text: 'Seguindo'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: [
+          _Feed(
+            asyncPosts: ref.watch(postsStreamProvider),
+            myUid: myUid,
+            emptyMessage: 'Nenhuma publicação ainda',
+            emptyHint: 'Seja o primeiro a publicar!',
+            onRefresh: () => ref.invalidate(postsStreamProvider),
+          ),
+          _Feed(
+            asyncPosts: ref.watch(followingPostsStreamProvider),
+            myUid: myUid,
+            emptyMessage: 'Você ainda não segue ninguém',
+            emptyHint:
+                'Siga jogadores para ver as publicações deles aqui.',
+            onRefresh: () => ref.invalidate(followingPostsStreamProvider),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: null,
@@ -64,6 +78,65 @@ class HomeScreen extends ConsumerWidget {
         tooltip: 'Nova publicação',
         child: const Icon(Icons.add_rounded),
       ),
+    );
+  }
+
+}
+
+/// Shared list body for both feed tabs (Global / Seguindo). Stateless
+/// rendering of an [AsyncValue] of posts plus the empty-state copy.
+class _Feed extends ConsumerWidget {
+  final AsyncValue<List<PostModel>> asyncPosts;
+  final String myUid;
+  final String emptyMessage;
+  final String emptyHint;
+  final VoidCallback onRefresh;
+
+  const _Feed({
+    required this.asyncPosts,
+    required this.myUid,
+    required this.emptyMessage,
+    required this.emptyHint,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return asyncPosts.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Erro: $e')),
+      data: (posts) {
+        if (posts.isEmpty) {
+          return _EmptyFeed(
+            message: emptyMessage,
+            hint: emptyHint,
+            onPost: () => AppNavigator.pushWithNavBar(
+                context, const CreatePostScreen()),
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: () async => onRefresh(),
+          child: ListView.builder(
+            padding: const EdgeInsets.only(top: 8, bottom: 80),
+            itemCount: posts.length,
+            itemBuilder: (_, i) => _PostCard(
+              post: posts[i],
+              myUid: myUid,
+              onLike: () => ref
+                  .read(postRepositoryProvider)
+                  .toggleLike(posts[i].id, myUid),
+              onShare: () =>
+                  ref.read(postRepositoryProvider).sharePost(posts[i]),
+              onViewProfile: () => AppNavigator.pushWithNavBar(
+                context,
+                UserProfileScreen(userId: posts[i].userId),
+              ),
+              onMessage: () => _openChatWithAuthor(context, ref, posts[i]),
+              onDelete: () => _confirmDeletePost(context, ref, posts[i].id),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -782,8 +855,14 @@ class _CommentTile extends ConsumerWidget {
 // ─── Empty / providers aux ────────────────────────────────────────────────────
 
 class _EmptyFeed extends StatelessWidget {
+  final String message;
+  final String hint;
   final VoidCallback onPost;
-  const _EmptyFeed({required this.onPost});
+  const _EmptyFeed({
+    required this.message,
+    required this.hint,
+    required this.onPost,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -798,10 +877,10 @@ class _EmptyFeed extends StatelessWidget {
             Icon(Icons.dynamic_feed_rounded,
                 size: 64, color: cs.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Nenhuma publicação ainda',
-                style: theme.textTheme.titleMedium),
+            Text(message, style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text('Seja o primeiro a publicar!',
+            Text(hint,
+                textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: cs.onSurfaceVariant)),
             const SizedBox(height: 24),

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user_model.dart';
 
+/// Hard cap on saved addresses per user. Anything above this rejects.
+const int kMaxSavedAddresses = 20;
+
 final socialRepositoryProvider = Provider<SocialRepository>((ref) {
   return SocialRepository(firestore: FirebaseFirestore.instance);
 });
@@ -48,6 +51,148 @@ class SocialRepository {
       'addressLat': lat,
       'addressLng': lng,
       'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// Adds a new entry to the user's address book. Throws if the book
+  /// already has [kMaxSavedAddresses] entries. If the user didn't have a
+  /// fixed address yet, the new one becomes active automatically.
+  Future<SavedAddress> addSavedAddress({
+    required String label,
+    required String address,
+    required double lat,
+    required double lng,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) throw Exception('Não autenticado.');
+
+    return _db.runTransaction((tx) async {
+      final ref = _userDoc(me.uid);
+      final snap = await tx.get(ref);
+      final data = snap.data() ?? const <String, dynamic>{};
+      final rawList = (data['addresses'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (rawList.length >= kMaxSavedAddresses) {
+        throw Exception('Limite de $kMaxSavedAddresses endereços atingido.');
+      }
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final entry = SavedAddress(
+        id: id,
+        label: label.trim().isEmpty ? 'Endereço' : label.trim(),
+        address: address,
+        lat: lat,
+        lng: lng,
+      );
+      rawList.add(entry.toMap());
+      final patch = <String, dynamic>{
+        'addresses': rawList,
+        'updatedAt': Timestamp.now(),
+      };
+      // Auto-activate if no active address yet.
+      if ((data['activeAddressId'] as String?) == null) {
+        patch['activeAddressId'] = id;
+        patch['address'] = address;
+        patch['addressLat'] = lat;
+        patch['addressLng'] = lng;
+      }
+      tx.update(ref, patch);
+      return entry;
+    });
+  }
+
+  /// Removes a saved address by id. If it was the active one, picks the
+  /// first remaining (or clears the legacy fields when none are left).
+  Future<void> removeSavedAddress(String addressId) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+    await _db.runTransaction((tx) async {
+      final ref = _userDoc(me.uid);
+      final snap = await tx.get(ref);
+      final data = snap.data() ?? const <String, dynamic>{};
+      final rawList = (data['addresses'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      rawList.removeWhere((m) => m['id'] == addressId);
+      final wasActive = (data['activeAddressId'] as String?) == addressId;
+      final patch = <String, dynamic>{
+        'addresses': rawList,
+        'updatedAt': Timestamp.now(),
+      };
+      if (wasActive) {
+        if (rawList.isEmpty) {
+          patch['activeAddressId'] = null;
+          patch['address'] = null;
+          patch['addressLat'] = null;
+          patch['addressLng'] = null;
+        } else {
+          final next = rawList.first;
+          patch['activeAddressId'] = next['id'];
+          patch['address'] = next['address'];
+          patch['addressLat'] = next['lat'];
+          patch['addressLng'] = next['lng'];
+        }
+      }
+      tx.update(ref, patch);
+    });
+  }
+
+  /// Switches the active address to [addressId] and mirrors its
+  /// coordinates into the legacy fields.
+  Future<void> setActiveAddress(String addressId) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+    await _db.runTransaction((tx) async {
+      final ref = _userDoc(me.uid);
+      final snap = await tx.get(ref);
+      final data = snap.data() ?? const <String, dynamic>{};
+      final rawList = (data['addresses'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final target = rawList.firstWhere(
+        (m) => m['id'] == addressId,
+        orElse: () => const {},
+      );
+      if (target.isEmpty) return;
+      tx.update(ref, {
+        'activeAddressId': addressId,
+        'address': target['address'],
+        'addressLat': target['lat'],
+        'addressLng': target['lng'],
+        'updatedAt': Timestamp.now(),
+      });
+    });
+  }
+
+  /// Follows / unfollows another user in a single transaction, keeping
+  /// the target's `followersCount` in sync. No-op when targeting self.
+  Future<void> toggleFollow(String otherUid) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || me.uid == otherUid) return;
+    final myRef = _userDoc(me.uid);
+    final otherRef = _userDoc(otherUid);
+    await _db.runTransaction((tx) async {
+      final mySnap = await tx.get(myRef);
+      final following =
+          List<String>.from(mySnap.data()?['following'] as List? ?? []);
+      final isFollowing = following.contains(otherUid);
+      if (isFollowing) {
+        tx.update(myRef, {
+          'following': FieldValue.arrayRemove([otherUid]),
+          'updatedAt': Timestamp.now(),
+        });
+        tx.update(otherRef, {
+          'followersCount': FieldValue.increment(-1),
+        });
+      } else {
+        tx.update(myRef, {
+          'following': FieldValue.arrayUnion([otherUid]),
+          'updatedAt': Timestamp.now(),
+        });
+        tx.update(otherRef, {
+          'followersCount': FieldValue.increment(1),
+        });
+      }
     });
   }
 

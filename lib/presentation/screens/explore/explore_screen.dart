@@ -23,8 +23,6 @@ class ExploreScreen extends ConsumerStatefulWidget {
 }
 
 class _ExploreScreenState extends ConsumerState<ExploreScreen> {
-  String? _selectedSport;
-
   void _openMap({String? sport}) {
     AppNavigator.pushWithNavBar(
       context,
@@ -40,6 +38,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
     final myAvail = ref.watch(myAvailabilityProvider).valueOrNull;
     final me = ref.watch(currentUserProvider).valueOrNull;
+    final selectedSport = ref.watch(selectedSportFilterProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -69,7 +68,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             child: _MapCard(
               venueCount: venues.length,
               playerCount: players.length,
-              onTap: () => _openMap(sport: _selectedSport),
+              onTap: () => _openMap(sport: selectedSport),
             ),
           ),
           const SizedBox(height: 20),
@@ -96,19 +95,20 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
                     label: const Text('Todos'),
-                    selected: _selectedSport == null,
-                    onSelected: (_) => setState(() => _selectedSport = null),
+                    selected: selectedSport == null,
+                    onSelected: (_) => ref
+                        .read(selectedSportFilterProvider.notifier)
+                        .setSport(null),
                   ),
                 ),
                 ...kSportsList.map((s) => Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         label: Text(s),
-                        selected: _selectedSport == s,
-                        onSelected: (_) {
-                          setState(() =>
-                              _selectedSport = _selectedSport == s ? null : s);
-                        },
+                        selected: selectedSport == s,
+                        onSelected: (_) => ref
+                            .read(selectedSportFilterProvider.notifier)
+                            .setSport(selectedSport == s ? null : s),
                       ),
                     )),
               ],

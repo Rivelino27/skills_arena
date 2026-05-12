@@ -102,6 +102,23 @@ class ConversationModel {
 
 enum MessageType { text, location }
 
+/// Whitelisted reaction emojis for messages. Matches WhatsApp-style
+/// long-press picker. Anything outside this list is silently ignored
+/// on read for forward compatibility.
+const List<String> kReactionEmojis = [
+  '👍',
+  '❤️',
+  '😂',
+  '😎',
+  '🏆',
+  '🤝',
+  '✅',
+  '❌',
+  '👎',
+  '👏',
+  '🆗',
+];
+
 class MessageModel {
   final String id;
   final String senderId;
@@ -111,6 +128,9 @@ class MessageModel {
   final double? lat;
   final double? lng;
   final DateTime createdAt;
+  /// emoji → list of uids who reacted with it. A user can only have
+  /// one reaction per message (toggling another emoji moves it).
+  final Map<String, List<String>> reactions;
 
   const MessageModel({
     required this.id,
@@ -121,11 +141,21 @@ class MessageModel {
     this.lat,
     this.lng,
     required this.createdAt,
+    this.reactions = const {},
   });
+
+  /// Returns the emoji this user reacted with, or null when they haven't.
+  String? reactionFor(String uid) {
+    for (final entry in reactions.entries) {
+      if (entry.value.contains(uid)) return entry.key;
+    }
+    return null;
+  }
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
     final rawType = d['type'] as String?;
+    final rawReactions = d['reactions'] as Map<String, dynamic>? ?? const {};
     return MessageModel(
       id: doc.id,
       senderId: d['senderId'] as String,
@@ -135,6 +165,9 @@ class MessageModel {
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
       createdAt: (d['createdAt'] as Timestamp).toDate(),
+      reactions: rawReactions.map(
+        (k, v) => MapEntry(k, List<String>.from(v as List? ?? const [])),
+      ),
     );
   }
 
@@ -146,5 +179,6 @@ class MessageModel {
         if (lat != null) 'lat': lat,
         if (lng != null) 'lng': lng,
         'createdAt': Timestamp.fromDate(createdAt),
+        'reactions': reactions,
       };
 }

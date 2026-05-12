@@ -87,6 +87,22 @@ class PostRepository {
       .snapshots()
       .map((s) => s.docs.map(PostModel.fromFirestore).toList());
 
+  /// Posts only from users in [followedUids]. Empty list → empty stream.
+  /// Firestore `whereIn` caps at 30 ids, which is fine: we slice to keep
+  /// the query valid and let UI surface "follow more people" when empty.
+  Stream<List<PostModel>> followingPostsStream(List<String> followedUids) {
+    if (followedUids.isEmpty) return Stream.value(const []);
+    final ids = followedUids.length > 30
+        ? followedUids.sublist(0, 30)
+        : followedUids;
+    return _posts
+        .where('userId', whereIn: ids)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((s) => s.docs.map(PostModel.fromFirestore).toList());
+  }
+
   // ─── Comentários ──────────────────────────────────────────────────────────
 
   Stream<List<CommentModel>> commentsStream(String postId,

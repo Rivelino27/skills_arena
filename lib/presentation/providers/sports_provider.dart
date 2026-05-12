@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/player_availability_model.dart';
 import '../../data/models/sports_venue_model.dart';
@@ -40,8 +41,46 @@ final venueAttendanceProvider =
       ref.watch(sportsRepositoryProvider).attendanceStream(venueId),
 );
 
-/// Filtro de esporte selecionado no mapa (null = todos).
-final selectedSportFilterProvider = StateProvider<String?>((ref) => null);
+/// Filtro de esporte selecionado, compartilhado entre Explorar e Mapa.
+/// Persistido em `SharedPreferences` para sobreviver a restart do app.
+/// `null` = "Todos" (sem filtro).
+final selectedSportFilterProvider =
+    StateNotifierProvider<SportFilterNotifier, String?>(
+  (ref) => SportFilterNotifier(),
+);
+
+class SportFilterNotifier extends StateNotifier<String?> {
+  SportFilterNotifier() : super(null) {
+    _load();
+  }
+
+  static const _key = 'selected_sport_filter';
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getString(_key);
+      if (v != null && v.isNotEmpty) state = v;
+    } catch (_) {/* keep default null */}
+  }
+
+  Future<void> setSport(String? sport) async {
+    state = sport;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (sport == null) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, sport);
+      }
+    } catch (_) {/* state is set, persistence is best-effort */}
+  }
+}
 
 /// Raio de busca em km (padrão 5 km).
 final mapRadiusProvider = StateProvider<double>((ref) => 5.0);
+
+/// Toggle de "busca global" no mapa — ignora o raio quando ativo e
+/// mostra tudo na região visível (otimizado pelo debounce). Útil quando
+/// o usuário não encontra muita coisa no raio padrão.
+final globalSearchProvider = StateProvider<bool>((ref) => false);

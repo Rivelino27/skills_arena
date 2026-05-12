@@ -85,6 +85,24 @@ class ProfileScreen extends ConsumerWidget {
               Center(
                 child: _PremiumBadge(isPremium: isPremium),
               ),
+              const SizedBox(height: 12),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.group_rounded,
+                        size: 16, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${user?.followersCount ?? 0} seguidor'
+                      '${(user?.followersCount ?? 0) == 1 ? '' : 'es'} • '
+                      '${user?.following.length ?? 0} seguindo',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 32),
               if (!isPremium) ...[
                 Card(

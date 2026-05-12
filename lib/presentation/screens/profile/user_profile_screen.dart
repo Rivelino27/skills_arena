@@ -198,15 +198,44 @@ class _ProfileBody extends ConsumerWidget {
                   ],
                 ),
               ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.group_rounded,
+                      size: 16, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${user.followersCount} seguidor${user.followersCount == 1 ? '' : 'es'}',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
             if (!isMe)
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: FilledButton.icon(
-                  onPressed:
-                      isBlocked ? null : () => _openChat(context, ref),
-                  icon: const Icon(Icons.send_rounded),
-                  label: const Text('Enviar mensagem'),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _FollowButton(
+                        targetUid: user.id,
+                        following: me?.isFollowing(user.id) ?? false,
+                        disabled: isBlocked,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed:
+                            isBlocked ? null : () => _openChat(context, ref),
+                        icon: const Icon(Icons.send_rounded),
+                        label: const Text('Mensagem'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Padding(
@@ -341,5 +370,36 @@ class _MiniPostTile extends StatelessWidget {
       case PostType.link:
         return Icon(Icons.link_rounded, color: cs.primary);
     }
+  }
+}
+
+class _FollowButton extends ConsumerWidget {
+  final String targetUid;
+  final bool following;
+  final bool disabled;
+
+  const _FollowButton({
+    required this.targetUid,
+    required this.following,
+    required this.disabled,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onPressed = disabled
+        ? null
+        : () => ref.read(socialRepositoryProvider).toggleFollow(targetUid);
+    if (following) {
+      return OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.check_rounded),
+        label: const Text('Seguindo'),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.person_add_alt_rounded),
+      label: const Text('Seguir'),
+    );
   }
 }
