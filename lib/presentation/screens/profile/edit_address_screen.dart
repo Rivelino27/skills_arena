@@ -587,6 +587,37 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
   }
 }
 
+/// Address parts as returned by ViaCEP (`logradouro`, `bairro`, etc.).
+/// Kept around while the user is in "CEP mode" so we can rebuild the
+/// search string when they type a number, and so the save button can
+/// stay enabled even before Nominatim finds a precise match.
+class _CepData {
+  final String street;
+  final String neighborhood;
+  final String city;
+  final String state;
+
+  const _CepData({
+    required this.street,
+    required this.neighborhood,
+    required this.city,
+    required this.state,
+  });
+
+  String assemble({String? number}) {
+    final parts = <String>[];
+    if (street.isNotEmpty) {
+      parts.add((number?.isNotEmpty ?? false)
+          ? '$street, $number'
+          : street);
+    }
+    if (neighborhood.isNotEmpty) parts.add(neighborhood);
+    if (city.isNotEmpty) parts.add(city);
+    if (state.isNotEmpty) parts.add(state);
+    return parts.join(', ');
+  }
+}
+
 class _GeoResult {
   final String displayName;
   final double lat;
