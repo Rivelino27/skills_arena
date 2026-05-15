@@ -7,6 +7,7 @@ import '../../core/errors/app_failure.dart';
 import '../models/player_availability_model.dart';
 import '../models/sports_venue_model.dart';
 import '../models/venue_attendance_model.dart';
+import '../models/venue_visitor_model.dart';
 
 final sportsRepositoryProvider = Provider<SportsRepository>((ref) {
   return SportsRepository(firestore: FirebaseFirestore.instance);
@@ -233,5 +234,72 @@ class SportsRepository {
         .get();
     if (snap.docs.isEmpty) return null;
     return PlayerAvailabilityModel.fromFirestore(snap.docs.first);
+  }
+
+  // ─── Mural da quadra: visitantes / hall da fama ──────────────────────────
+
+  CollectionReference<Map<String, dynamic>> _venueVisitors(String venueId) =>
+      _venues.doc(venueId).collection('visitors');
+
+  /// Stream of visitors ordered by visit count desc — used for the
+  /// Hall da Fama (top 3) and the recent-visitors list.
+  Stream<List<VenueVisitorModel>> venueVisitorsStream(String venueId,
+          {int limit = 30}) =>
+      _venueVisitors(venueId)
+          .orderBy('visitCount', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) =>
+              s.docs.map(VenueVisitorModel.fromFirestore).toList());
+
+  /// Records a visit (check-in) at this venue for the current user.
+  /// Idempotent within a 4h window so spam-tapping the button doesn't
+  /// inflate the count. Returns `true` if the count was incremented,
+  /// `false` if it was just a lastVisitAt refresh.
+  Future<Either<AppFailure, bool>> recordVenueVisit(String venueId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return const Left(AuthFailure(message: 'Usuário não autenticado.'));
+      }
+      bool incremented = false;
+      await _db.runTransaction((tx) async {
+        final ref = _venueVisitors(venueId).doc(user.uid);
+        final snap = await tx.get(ref);
+        final now = Timestamp.now();
+        if (snap.exists) {
+          final data = snap.data() ?? const <String, dynamic>{};
+          final last = data['lastVisitAt'] as Timestamp?;
+          final shouldCount = last == null ||
+              DateTime.now().difference(last.toDate()) >
+                  const Duration(hours: 4);
+          if (shouldCount) {
+            tx.update(ref, {
+              'visitCount': FieldValue.increment(1),
+              'lastVisitAt': now,
+              'userName': user.displayName ?? 'Usuário',
+              'userPhotoUrl': user.photoURL,
+            });
+            incremented = true;
+          } else {
+            tx.update(ref, {'lastVisitAt': now});
+          }
+        } else {
+          tx.set(ref, {
+            'userId': user.uid,
+            'userName': user.displayName ?? 'Usuário',
+            'userPhotoUrl': user.photoURL,
+            'visitCount': 1,
+            'firstVisitAt': now,
+            'lastVisitAt': now,
+          });
+          incremented = true;
+        }
+      });
+      return Right(incremented);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao registrar visita.'));
+    }
   }
 }

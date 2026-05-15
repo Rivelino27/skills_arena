@@ -246,17 +246,22 @@ class _AddAddressScreen extends ConsumerStatefulWidget {
 class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
   final _labelCtrl = TextEditingController(text: 'Casa');
   final _ctrl = TextEditingController();
+  final _numberCtrl = TextEditingController();
   Timer? _debounce;
+  Timer? _numberDebounce;
   bool _searching = false;
   bool _saving = false;
   List<_GeoResult> _suggestions = [];
   _GeoResult? _selected;
+  _CepData? _cepData;
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _numberDebounce?.cancel();
     _labelCtrl.dispose();
     _ctrl.dispose();
+    _numberCtrl.dispose();
     super.dispose();
   }
 
@@ -268,12 +273,28 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
           Timer(const Duration(milliseconds: 300), () => _fetchCep(digits));
       return;
     }
+    // Sair do modo CEP se o usuário começar a digitar livremente
+    if (_cepData != null) {
+      setState(() {
+        _cepData = null;
+        _numberCtrl.clear();
+        _selected = null;
+      });
+    }
     if (q.trim().length < 3) {
       setState(() => _suggestions = []);
       return;
     }
     _debounce =
         Timer(const Duration(milliseconds: 400), () => _fetch(q));
+  }
+
+  void _onNumberChanged(String v) {
+    _numberDebounce?.cancel();
+    _numberDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted || _cepData == null) return;
+      _resolveAddressForCep(v.trim());
+    });
   }
 
   Future<void> _fetchCep(String cep) async {
@@ -292,21 +313,92 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
         setState(() => _searching = false);
         return;
       }
-      final parts = [
-        data['logradouro'] as String? ?? '',
-        data['bairro'] as String? ?? '',
-        data['localidade'] as String? ?? '',
-        data['uf'] as String? ?? '',
-      ].where((s) => s.isNotEmpty);
-      final address = parts.join(', ');
-      if (address.isNotEmpty) {
-        _ctrl.text = address;
-        _fetch(address, autoSelect: true);
-      } else {
-        setState(() => _searching = false);
-      }
+      final info = _CepData(
+        street: data['logradouro'] as String? ?? '',
+        neighborhood: data['bairro'] as String? ?? '',
+        city: data['localidade'] as String? ?? '',
+        state: data['uf'] as String? ?? '',
+      );
+      setState(() {
+        _cepData = info;
+        _suggestions = [];
+      });
+      await _resolveAddressForCep('');
     } catch (_) {
       if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  /// Resolve coords for the current CEP info + optional number.
+  /// Tries progressively less specific Nominatim queries so the save
+  /// button is always enabled when a valid CEP was found — even if the
+  /// precise street isn't in OSM yet, we fall back to city center.
+  Future<void> _resolveAddressForCep(String number) async {
+    final info = _cepData;
+    if (info == null) return;
+    final fullAddr = info.assemble(number: number);
+    _ctrl.text = fullAddr;
+    setState(() {
+      _searching = true;
+      _suggestions = [];
+    });
+    final queries = <String>[
+      if (number.isNotEmpty && info.street.isNotEmpty)
+        '${info.street}, $number, ${info.city}, ${info.state}',
+      if (info.street.isNotEmpty)
+        '${info.street}, ${info.city}, ${info.state}',
+      if (info.neighborhood.isNotEmpty)
+        '${info.neighborhood}, ${info.city}, ${info.state}',
+      '${info.city}, ${info.state}',
+    ];
+    _GeoResult? hit;
+    for (final q in queries) {
+      final r = await _runNominatim(q);
+      if (r.isNotEmpty) {
+        hit = r.first;
+        break;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _searching = false;
+      if (hit != null) {
+        _selected = _GeoResult(
+          displayName: fullAddr,
+          lat: hit.lat,
+          lon: hit.lon,
+        );
+      }
+    });
+  }
+
+  Future<List<_GeoResult>> _runNominatim(String query) async {
+    try {
+      final client = HttpClient();
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': query.trim(),
+        'format': 'json',
+        'limit': '3',
+        'countrycodes': 'br',
+      });
+      final req = await client.getUrl(uri);
+      req.headers
+        ..set(HttpHeaders.userAgentHeader, 'SkillsArena/1.0')
+        ..set(HttpHeaders.acceptHeader, 'application/json');
+      final res = await req.close();
+      final body = await res.transform(const Utf8Decoder()).join();
+      client.close();
+      final list = jsonDecode(body) as List<dynamic>;
+      return list.map((e) {
+        final m = e as Map<String, dynamic>;
+        return _GeoResult(
+          displayName: m['display_name'] as String,
+          lat: double.parse(m['lat'] as String),
+          lon: double.parse(m['lon'] as String),
+        );
+      }).toList();
+    } catch (_) {
+      return const [];
     }
   }
 

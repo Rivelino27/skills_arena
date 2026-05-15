@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/player_availability_model.dart';
 import '../../data/models/sports_venue_model.dart';
 import '../../data/models/venue_attendance_model.dart';
+import '../../data/models/venue_visitor_model.dart';
 import '../../data/repositories/sports_repository.dart';
 
 final venuesStreamProvider = StreamProvider<List<SportsVenueModel>>((ref) {
@@ -39,6 +40,14 @@ final venueAttendanceProvider =
     StreamProvider.family<List<VenueAttendanceModel>, String>(
   (ref, venueId) =>
       ref.watch(sportsRepositoryProvider).attendanceStream(venueId),
+);
+
+/// Visitor history (check-ins) for a given venue. Sorted by visitCount
+/// desc — top entries form the Hall da Fama on the venue detail.
+final venueVisitorsProvider =
+    StreamProvider.family<List<VenueVisitorModel>, String>(
+  (ref, venueId) =>
+      ref.watch(sportsRepositoryProvider).venueVisitorsStream(venueId),
 );
 
 /// Filtro de esporte selecionado, compartilhado entre Explorar e Mapa.

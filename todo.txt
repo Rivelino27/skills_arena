@@ -1,5 +1,20 @@
 Falta arrumar / incluir:
 
+arrume:
+em perfil, ao adicionar cep do endereço, aparece o endereço no form mas não da para selecionalo para salvar o endereço e influir numero da rua que aaprece no cép.
+
+Adiconar mmodo shorts em home, para ir rolando posts com links de video igual o tiktok faz.
+
+Os users devem poder ver quadras locais verificados.
+
+Quadras / locais devem ter seu hanking de jogadores o hanking de nmelhores jogadores gerais separado.
+
+User premium pode criar seu time desafiar outros times e marcar jogo do time em uma quadra.
+
+me mostre como fazer um user virar prremium manualmente e como devem estar as regrras e indices do firebase.
+
+<<<< fixed:
+
 Arrume, ao digitar cep para cadastrar endereço / local, fica o endereço no form, mas não tem como adicioanr ele, deve sempre ter como adiconar o endereço.
 
 Ao mover um pouco o mapa, mesmo com a busca global ativada some da listagem os jogadores e locais encontrados, eles devem aparecer na busca global ativada, deve aapliar muitoa area de busca e ficar mostrando.
@@ -10,7 +25,7 @@ No mapa deve ter um icone de extrela e ao clicar nele carregar a listagem dos jo
 
 Aumwentar a busca global para 60 km.
 
-<< fixed:
+
 
 Em home as vezes em tocar no usuario do post, não abre a pagina do user e só clicando mais uma vez abre.
 

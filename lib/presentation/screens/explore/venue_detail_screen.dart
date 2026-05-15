@@ -9,6 +9,7 @@ import '../../../core/utils/geo_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/sports_venue_model.dart';
 import '../../../data/models/venue_attendance_model.dart';
+import '../../../data/models/venue_visitor_model.dart';
 import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../../data/repositories/sports_repository.dart';
@@ -226,6 +227,10 @@ class _InfoTab extends ConsumerWidget {
 
         // ── Quem vai jogar lá ─────────────────────────────────────────
         _AttendanceSection(venueId: v.id, venueName: v.name),
+        const SizedBox(height: 8),
+
+        // ── Hall da Fama + visitantes (check-in) ──────────────────────
+        _VisitorsHallSection(venueId: v.id, venueName: v.name),
         const SizedBox(height: 8),
 
         // ── Jogadores na região (querem jogar perto desta quadra) ─────
@@ -1503,6 +1508,313 @@ class _MarkAttendanceSheetState extends State<_MarkAttendanceSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Mural da quadra: hall da fama + visitantes ──────────────────────────
+//
+// Anyone can tap "Cheguei aqui" to register a visit. Each user has one
+// doc under `sports_venues/{venueId}/visitors/{uid}` with a count and
+// timestamps. Spam-tap protection: count only goes up if last visit was
+// >4h ago (enforced in the repository transaction).
+//
+// The top 3 visitors by count form the Hall da Fama (gold/silver/bronze
+// medal); everyone else is listed below as recent visitors.
+
+class _VisitorsHallSection extends ConsumerWidget {
+  final String venueId;
+  final String venueName;
+  const _VisitorsHallSection({
+    required this.venueId,
+    required this.venueName,
+  });
+
+  Future<void> _checkIn(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final res = await ref
+        .read(sportsRepositoryProvider)
+        .recordVenueVisit(venueId);
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (counted) => messenger.showSnackBar(
+        SnackBar(
+          content: Text(counted
+              ? 'Check-in registrado em $venueName!'
+              : 'Visita já contada nas últimas 4h.'),
+        ),
+      ),
+    );
+  }
+
+  String _lastVisitLabel(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'agora';
+    if (diff.inHours < 1) return '${diff.inMinutes}min';
+    if (diff.inDays < 1) return '${diff.inHours}h';
+    if (diff.inDays < 30) return '${diff.inDays}d';
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final visitorsAsync = ref.watch(venueVisitorsProvider(venueId));
+    final visitors = visitorsAsync.valueOrNull ?? const <VenueVisitorModel>[];
+    final top3 = visitors.take(3).toList();
+    final others = visitors.length > 3
+        ? visitors.sublist(3, visitors.length > 13 ? 13 : visitors.length)
+        : <VenueVisitorModel>[];
+    final mine = visitors.where((v) => v.userId == myUid).firstOrNull;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.emoji_events_rounded, color: Colors.amber.shade700),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Hall da Fama',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        visitors.isEmpty
+                            ? 'Ninguém fez check-in aqui ainda.'
+                            : '${visitors.length} '
+                                'visitante${visitors.length == 1 ? '' : 's'} '
+                                'no total',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (top3.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _Podium(visitors: top3),
+            ],
+            if (others.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text('Visitantes recentes',
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: cs.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: others
+                    .map((v) => _VisitorChip(
+                          visitor: v,
+                          isMe: v.userId == myUid,
+                          lastVisitLabel: _lastVisitLabel(v.lastVisitAt),
+                        ))
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => _checkIn(context, ref),
+              icon: const Icon(Icons.where_to_vote_rounded),
+              label: Text(mine == null
+                  ? 'Cheguei aqui'
+                  : 'Cheguei de novo (${mine.visitCount})'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Podium extends StatelessWidget {
+  final List<VenueVisitorModel> visitors;
+  const _Podium({required this.visitors});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Visual podium: 2nd, 1st, 3rd in that order so 1st is in the middle.
+    final order = <(int, VenueVisitorModel)>[];
+    if (visitors.length >= 2) order.add((2, visitors[1]));
+    order.add((1, visitors[0]));
+    if (visitors.length >= 3) order.add((3, visitors[2]));
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final (rank, v) in order)
+          _PodiumColumn(
+            rank: rank,
+            visitor: v,
+            color: rank == 1
+                ? Colors.amber
+                : rank == 2
+                    ? Colors.grey.shade400
+                    : Colors.brown.shade300,
+            height: rank == 1 ? 64.0 : rank == 2 ? 48.0 : 36.0,
+            cs: cs,
+          ),
+      ],
+    );
+  }
+}
+
+class _PodiumColumn extends StatelessWidget {
+  final int rank;
+  final VenueVisitorModel visitor;
+  final Color color;
+  final double height;
+  final ColorScheme cs;
+  const _PodiumColumn({
+    required this.rank,
+    required this.visitor,
+    required this.color,
+    required this.height,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                radius: rank == 1 ? 26 : 22,
+                backgroundImage: visitor.userPhotoUrl != null
+                    ? NetworkImage(visitor.userPhotoUrl!)
+                    : null,
+                backgroundColor: cs.primaryContainer,
+                child: visitor.userPhotoUrl == null
+                    ? Text(
+                        visitor.userName.isNotEmpty
+                            ? visitor.userName[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: rank == 1 ? 18 : 14),
+                      )
+                    : null,
+              ),
+              if (rank == 1)
+                Positioned(
+                  top: -10,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Icon(Icons.emoji_events_rounded,
+                        color: color, size: 22),
+                  ),
+                ),
+              Positioned(
+                bottom: -4,
+                right: -4,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.surface, width: 2),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$rank',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            visitor.userName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: rank == 1 ? FontWeight.bold : FontWeight.w600,
+            ),
+          ),
+          Text(
+            '${visitor.visitCount} '
+            'visita${visitor.visitCount == 1 ? '' : 's'}',
+            style: TextStyle(
+                fontSize: 10, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            width: double.infinity,
+            height: height,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.7),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(6)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VisitorChip extends StatelessWidget {
+  final VenueVisitorModel visitor;
+  final bool isMe;
+  final String lastVisitLabel;
+  const _VisitorChip({
+    required this.visitor,
+    required this.isMe,
+    required this.lastVisitLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Chip(
+      avatar: CircleAvatar(
+        radius: 10,
+        backgroundImage: visitor.userPhotoUrl != null
+            ? NetworkImage(visitor.userPhotoUrl!)
+            : null,
+        backgroundColor: cs.surfaceContainerHighest,
+        child: visitor.userPhotoUrl == null
+            ? Text(
+                visitor.userName.isNotEmpty
+                    ? visitor.userName[0].toUpperCase()
+                    : '?',
+                style: const TextStyle(fontSize: 10),
+              )
+            : null,
+      ),
+      label: Text(
+        '${isMe ? 'Você' : visitor.userName} • $lastVisitLabel',
+        style: const TextStyle(fontSize: 12),
+      ),
+      backgroundColor:
+          isMe ? cs.primaryContainer.withValues(alpha: 0.4) : null,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 }
