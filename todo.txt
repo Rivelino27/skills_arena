@@ -1,5 +1,12 @@
 Falta arrumar / incluir:
 
+falta coins para premium, card fifa de jogador premium, abilidades especiais de jogador, playstyles plus normal, bronze, 
+prata, dourado, 
+platina e diamante tipo foquete de velocidade, escudo de defesa, cartola e varinha magica de drible, user premium ganha 
+5 coins ao iniciar e depois 2 coins por mes, protegida no banco de dados na nuvem para evitar hakcer alterar moedas e
+ colocoar infinitas.
+
+<<<< fixed:
 arrume:
 em perfil, ao adicionar cep do endereço, aparece o endereço no form mas não da para selecionalo para salvar o endereço e influir numero da rua que aaprece no cép.
 
@@ -13,7 +20,7 @@ User premium pode criar seu time desafiar outros times e marcar jogo do time em 
 
 me mostre como fazer um user virar prremium manualmente e como devem estar as regrras e indices do firebase.
 
-<<<< fixed:
+
 
 Arrume, ao digitar cep para cadastrar endereço / local, fica o endereço no form, mas não tem como adicioanr ele, deve sempre ter como adiconar o endereço.
 

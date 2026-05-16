@@ -24,3 +24,12 @@ Coleção users → procure o doc pelo UID do usuário
 Edite o campo isPremium (boolean) → marque como true. Se o campo não existir, clique em "Adicionar campo" → name: isPremium, type: boolean, value: true
 Salvar. O app vai pegar a mudança automaticamente via currentUserProvider (stream).
 Para admin: mesma coisa, campo isAdmin: true. O ProfileScreen._PremiumBadge e a paywall do TeamsHubScreen leem isPremium. O selo de "verificada" em quadras tem fluxo separado em _AdminVerifyToggle (só admin pode mexer).
+
+Deploy
+
+firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes
+ou junto:
+
+
+firebase deploy --only firestore
