@@ -20,12 +20,31 @@ service cloud.firestore {
             .data.get('isAdmin', false) == true;
     }
 
+    /// True when the requesting user has `isPremium: true` OR is an admin.
+    /// Used to gate the "Times" feature (create / manage).
+    function isPremium() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.get('isPremium', false) == true
+          || get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.get('isAdmin', false) == true
+        );
+    }
+
+    /// Helper used by team_matches rules. Returns the data of a team doc
+    /// so we can check captain / member status of the proposer/opponent.
+    function teamDoc(teamId) {
+      return get(/databases/$(database)/documents/teams/$(teamId)).data;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────
     // The user owns their own document, BUT:
-    //   - `isAdmin` and `isPremium` cannot be set by the client.
+    //   - `isAdmin`, `isPremium`, `isVerified` cannot be set by the client.
     //     They must be promoted out-of-band (Firebase console or Cloud
-    //     Function). Otherwise any signed-in user could grant themselves
-    //     admin or premium roles.
+    //     Function), or by an admin via the in-app toggle. Otherwise any
+    //     signed-in user could grant themselves admin or premium roles.
     match /users/{uid} {
       allow read: if isSignedIn();
       allow create: if isMe(uid)
@@ -48,6 +67,14 @@ service cloud.firestore {
         isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['isAdmin', 'isPremium', 'isVerified'])
+      ) || (
+        // Anyone signed-in can toggle following on someone else's doc, but
+        // only the followersCount + following counter mirror — used by
+        // SocialRepository.toggleFollow. The actor's UID must be in (or
+        // removed from) the `following` list, never the target's.
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['followersCount'])
       );
       allow delete: if false;
     }
@@ -83,6 +110,17 @@ service cloud.firestore {
         )
       );
       allow delete: if isSignedIn() && resource.data.addedBy == request.auth.uid;
+
+      // ── Visitantes (check-in / hall da fama) ─────────────────────────
+      // Cada usuário tem um doc próprio com seu UID. Spam-protect (4h)
+      // é feito no client; aqui só garantimos identidade.
+      match /visitors/{userId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.userId == userId;
+        allow delete: if false;
+      }
     }
 
     // ── Player availability ───────────────────────────────────────────────
@@ -115,7 +153,8 @@ service cloud.firestore {
       );
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
 
-      // Comments — field: `userId`
+      // Comments — field: `userId`. Replies usam os mesmos docs com
+      // `replyToId` / `replyToName` opcionais.
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
@@ -171,6 +210,62 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
         allow delete: if false;
       }
+    }
+
+    // ── Teams (premium) ───────────────────────────────────────────────────
+    // Captain (= request.auth.uid) creates the team and is the only one
+    // who can edit its core fields. Membros podem se auto-remover
+    // (atualização limitada que só encolhe `memberIds`/`members`).
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+
+      // Criar exige plano premium (ou admin) e ser o próprio capitão.
+      allow create: if isSignedIn()
+        && request.resource.data.captainId == request.auth.uid
+        && request.resource.data.memberIds.hasAll([request.auth.uid])
+        && isPremium();
+
+      // Capitão pode tudo. Não-capitão só pode se auto-remover:
+      // memberIds[i] saiu, member objects shrink, e nenhum outro campo muda.
+      allow update: if isSignedIn() && (
+        resource.data.captainId == request.auth.uid
+        || (
+          request.auth.uid in resource.data.memberIds
+          && !(request.auth.uid in request.resource.data.memberIds)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['members', 'memberIds'])
+        )
+      );
+
+      allow delete: if isSignedIn()
+        && resource.data.captainId == request.auth.uid;
+    }
+
+    // ── Desafios entre times ──────────────────────────────────────────────
+    // Quem propõe precisa ser membro do time1. Quem altera status precisa
+    // ser capitão de algum dos dois times (aceitar, recusar, cancelar).
+    match /team_matches/{matchId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in teamDoc(request.resource.data.team1Id).memberIds
+        && request.resource.data.teamIds.hasAll([
+              request.resource.data.team1Id,
+              request.resource.data.team2Id
+           ]);
+
+      // Só capitães dos dois times podem mexer no status (accept / decline /
+      // cancel). Não permite trocar IDs nem datas — apenas o campo `status`.
+      allow update: if isSignedIn()
+        && (
+          request.auth.uid == teamDoc(resource.data.team1Id).captainId
+          || request.auth.uid == teamDoc(resource.data.team2Id).captainId
+        )
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status']);
+
+      allow delete: if false; // matches ficam pro histórico
     }
   }
 }
