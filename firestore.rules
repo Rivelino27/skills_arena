@@ -45,37 +45,91 @@ service cloud.firestore {
     //     They must be promoted out-of-band (Firebase console or Cloud
     //     Function), or by an admin via the in-app toggle. Otherwise any
     //     signed-in user could grant themselves admin or premium roles.
+    //   - `coins` cannot be set freely. It only changes via the
+    //     controlled grants below (+5 initial, +2 monthly), each gated
+    //     by a server-side timestamp the client can't fake.
+    //   - `firstPremiumGrantAt` is write-once.
+    //   - `lastMonthlyGrantAt` only advances forward, and only after 30d.
     match /users/{uid} {
       allow read: if isSignedIn();
+
+      // CREATE: brand-new user, no privileged flags allowed, coins=0.
       allow create: if isMe(uid)
         && request.resource.data.get('isAdmin', false) == false
         && request.resource.data.get('isPremium', false) == false
-        && request.resource.data.get('isVerified', false) == false;
-      // The user can update their own document, but cannot promote
-      // themselves to admin/premium/verified — those flags must stay
-      // unchanged unless an admin is doing the write.
-      allow update: if (
-        isMe(uid)
-        && request.resource.data.get('isAdmin', false)
-            == resource.data.get('isAdmin', false)
-        && request.resource.data.get('isPremium', false)
-            == resource.data.get('isPremium', false)
-        && request.resource.data.get('isVerified', false)
-            == resource.data.get('isVerified', false)
-      ) || (
-        // Admins can flip flags on any user.
-        isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['isAdmin', 'isPremium', 'isVerified'])
-      ) || (
-        // Anyone signed-in can toggle following on someone else's doc, but
-        // only the followersCount + following counter mirror — used by
-        // SocialRepository.toggleFollow. The actor's UID must be in (or
-        // removed from) the `following` list, never the target's.
-        isSignedIn()
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['followersCount'])
-      );
+        && request.resource.data.get('isVerified', false) == false
+        && request.resource.data.get('coins', 0) == 0
+        && !('firstPremiumGrantAt' in request.resource.data)
+        && !('lastMonthlyGrantAt' in request.resource.data);
+
+      // UPDATE — multiple branches, ANY of them allowed:
+      allow update:
+        // (1) Self-edit profile fields, but keep all privileged fields
+        //     EXACTLY equal to the previous values. This blocks coin
+        //     self-grants, premium self-promotion, etc.
+        if (
+          isMe(uid)
+          && request.resource.data.get('isAdmin', false)
+              == resource.data.get('isAdmin', false)
+          && request.resource.data.get('isPremium', false)
+              == resource.data.get('isPremium', false)
+          && request.resource.data.get('isVerified', false)
+              == resource.data.get('isVerified', false)
+          && request.resource.data.get('coins', 0)
+              == resource.data.get('coins', 0)
+          && request.resource.data.get('firstPremiumGrantAt', null)
+              == resource.data.get('firstPremiumGrantAt', null)
+          && request.resource.data.get('lastMonthlyGrantAt', null)
+              == resource.data.get('lastMonthlyGrantAt', null)
+        )
+        // (2) Admin override — admins can flip flags.
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['isAdmin', 'isPremium', 'isVerified'])
+        )
+        // (3) Follower counter mirror (toggle follow on someone else's
+        //     doc). Only the followersCount delta is allowed.
+        || (
+          isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['followersCount'])
+        )
+        // (4) INITIAL premium grant: self-claim once, +5 coins.
+        //     - Must be premium
+        //     - `firstPremiumGrantAt` must be unset (write-once)
+        //     - `coins` must be old + 5 exactly
+        //     - Server timestamp on `firstPremiumGrantAt`
+        || (
+          isMe(uid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['coins', 'firstPremiumGrantAt'])
+          && resource.data.get('isPremium', false) == true
+          && resource.data.get('firstPremiumGrantAt', null) == null
+          && request.resource.data.coins ==
+                resource.data.get('coins', 0) + 5
+          && request.resource.data.firstPremiumGrantAt == request.time
+        )
+        // (5) MONTHLY premium grant: self-claim once per 30d, +2 coins.
+        //     - Must be premium
+        //     - `lastMonthlyGrantAt` either null OR ≥30d in the past
+        //     - `coins` must be old + 2 exactly
+        //     - Server timestamp on `lastMonthlyGrantAt`
+        || (
+          isMe(uid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['coins', 'lastMonthlyGrantAt'])
+          && resource.data.get('isPremium', false) == true
+          && (
+            resource.data.get('lastMonthlyGrantAt', null) == null
+            || resource.data.lastMonthlyGrantAt
+                < request.time - duration.value(30, 'd')
+          )
+          && request.resource.data.coins ==
+                resource.data.get('coins', 0) + 2
+          && request.resource.data.lastMonthlyGrantAt == request.time
+        );
+
       allow delete: if false;
     }
 

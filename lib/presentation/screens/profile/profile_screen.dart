@@ -8,9 +8,11 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
 import '../teams/teams_hub_screen.dart';
+import '../../widgets/fifa_card_widget.dart';
 import 'edit_address_screen.dart';
 import 'global_ranking_screen.dart';
 import 'nav_demo_screen.dart';
+import 'player_card_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -22,8 +24,24 @@ class ProfileScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    final coins = userAsync.valueOrNull?.coins ?? 0;
+    final showCoinsChip = userAsync.valueOrNull?.isPremium ?? false;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Perfil')),
+      appBar: AppBar(
+        title: const Text('Perfil'),
+        actions: [
+          if (showCoinsChip)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: CoinsBalanceChip(
+                coins: coins,
+                onTap: () => AppNavigator.pushWithNavBar(
+                    context, const PlayerCardScreen()),
+              ),
+            ),
+        ],
+      ),
       body: userAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
@@ -105,7 +123,18 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              if (isPremium && user != null) ...[
+                Center(
+                  child: FifaCardWidget(
+                    user: user,
+                    scale: 0.85,
+                    onTap: () => AppNavigator.pushWithNavBar(
+                        context, const PlayerCardScreen()),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
               if (!isPremium) ...[
                 Card(
                   color: cs.primaryContainer,

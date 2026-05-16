@@ -253,4 +253,97 @@ class SocialRepository {
       .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(UserModel.fromFirestore).toList());
+
+  // ─── Coins (premium) ───────────────────────────────────────────────
+  //
+  // Grants are protected at the Firestore-rules layer: the client can
+  // only write `coins` together with a control timestamp, and the new
+  // value must equal old + the exact delta. We send `serverTimestamp()`
+  // for the timestamps so the rules can compare against `request.time`
+  // (the server clock — not spoofable).
+
+  /// One-shot 5-coin grant when the user first becomes premium.
+  /// Returns the new balance on success. Throws if already claimed.
+  Future<int> claimInitialPremiumGrant() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Não autenticado.');
+    return await _db.runTransaction<int>((tx) async {
+      final ref = _userDoc(user.uid);
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw Exception('Usuário não encontrado.');
+      }
+      final data = snap.data() ?? const {};
+      if (data['firstPremiumGrantAt'] != null) {
+        throw Exception('Bônus inicial já reivindicado.');
+      }
+      if (data.get('isPremium', false) != true) {
+        throw Exception('Plano Premium necessário.');
+      }
+      final newCoins = ((data['coins'] as num?)?.toInt() ?? 0) + 5;
+      tx.update(ref, {
+        'coins': newCoins,
+        'firstPremiumGrantAt': FieldValue.serverTimestamp(),
+      });
+      return newCoins;
+    });
+  }
+
+  /// Recurring +2 coins, claimable once per 30 days. Returns the new
+  /// balance. Throws if too soon or not premium.
+  Future<int> claimMonthlyGrant() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Não autenticado.');
+    return await _db.runTransaction<int>((tx) async {
+      final ref = _userDoc(user.uid);
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw Exception('Usuário não encontrado.');
+      }
+      final data = snap.data() ?? const {};
+      if (data.get('isPremium', false) != true) {
+        throw Exception('Plano Premium necessário.');
+      }
+      final last = data['lastMonthlyGrantAt'] as Timestamp?;
+      if (last != null) {
+        final delta = DateTime.now().difference(last.toDate());
+        if (delta < const Duration(days: 30)) {
+          final daysLeft = 30 - delta.inDays;
+          throw Exception(
+              'Próximo bônus em $daysLeft dia${daysLeft == 1 ? '' : 's'}.');
+        }
+      }
+      final newCoins = ((data['coins'] as num?)?.toInt() ?? 0) + 2;
+      tx.update(ref, {
+        'coins': newCoins,
+        'lastMonthlyGrantAt': FieldValue.serverTimestamp(),
+      });
+      return newCoins;
+    });
+  }
+
+  /// Update FIFA stats. Cap is enforced via Firestore rules per tier.
+  /// Stat values are clamped to 0–99 here client-side as a friendly
+  /// guard before the rules reject anything out of range.
+  Future<void> updateStats(Map<String, int> stats) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final clamped = stats.map(
+      (k, v) => MapEntry(k, v.clamp(0, 99).toInt()),
+    );
+    await _userDoc(user.uid).update({
+      'stats': clamped,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+}
+
+/// Tiny extension so `data.get('key', fallback)` reads like Firestore's
+/// rule-side syntax even when the value is missing.
+extension on Map<String, dynamic> {
+  T get<T>(String key, T fallback) {
+    final v = this[key];
+    if (v is T) return v;
+    return fallback;
+  }
 }

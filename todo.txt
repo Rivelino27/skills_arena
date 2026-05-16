@@ -2,7 +2,7 @@ Falta arrumar / incluir:
 
 falta coins para premium, card fifa de jogador premium, abilidades especiais de jogador, playstyles plus normal, bronze, 
 prata, dourado, 
-platina e diamante tipo foquete de velocidade, escudo de defesa, cartola e varinha magica de drible, user premium ganha 
+platina e diamante tipo foquete de velocidade, escudo de defesa, cartola e varinha magica de drible, bateria stamina, stats velocidade, drible, finalização, defesa, passe, bateria stamina, user premium ganha 
 5 coins ao iniciar e depois 2 coins por mes, protegida no banco de dados na nuvem para evitar hakcer alterar moedas e
  colocoar infinitas.
 
