@@ -29,3 +29,9 @@ final isPremiumProvider = Provider<bool>((ref) {
 final visibleUsersStreamProvider = StreamProvider<List<UserModel>>((ref) {
   return ref.watch(socialRepositoryProvider).visibleUsersStream();
 });
+
+/// Top usuários por número de seguidores. Alimenta a tela de ranking
+/// geral (separada do ranking por quadra).
+final topUsersByFollowersProvider = StreamProvider<List<UserModel>>((ref) {
+  return ref.watch(socialRepositoryProvider).topUsersByFollowersStream();
+});

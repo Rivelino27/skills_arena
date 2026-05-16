@@ -506,8 +506,63 @@ class _AddAddressScreenState extends ConsumerState<_AddAddressScreen> {
                 border: const OutlineInputBorder(),
               ),
             ),
+            if (_cepData != null) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _numberCtrl,
+                keyboardType: TextInputType.number,
+                onChanged: _onNumberChanged,
+                decoration: const InputDecoration(
+                  labelText: 'Número (opcional)',
+                  hintText: 'Ex: 123',
+                  prefixIcon: Icon(Icons.numbers_rounded),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
-            if (_suggestions.isNotEmpty)
+            if (_cepData != null) ...[
+              // Modo CEP: mostra o endereço resolvido direto, sem lista.
+              if (_selected != null)
+                Card(
+                  color: cs.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on_rounded,
+                            color: cs.onPrimaryContainer),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Endereço resolvido',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                    color: cs.onPrimaryContainer),
+                              ),
+                              Text(
+                                _selected!.displayName,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onPrimaryContainer),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_searching)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              const Spacer(),
+            ] else if (_suggestions.isNotEmpty)
               Expanded(
                 child: ListView.separated(
                   itemCount: _suggestions.length,

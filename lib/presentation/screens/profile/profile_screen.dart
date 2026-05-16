@@ -7,7 +7,9 @@ import '../../../core/navigation/app_navigator.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
+import '../teams/teams_hub_screen.dart';
 import 'edit_address_screen.dart';
+import 'global_ranking_screen.dart';
 import 'nav_demo_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -161,6 +163,43 @@ class ProfileScreen extends ConsumerWidget {
                       leading: const Icon(Icons.email_outlined),
                       title: const Text('E-mail'),
                       subtitle: Text(email),
+                    ),
+                    Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: cs.outlineVariant),
+                    ListTile(
+                      leading: const Icon(Icons.leaderboard_rounded),
+                      title: const Text('Ranking geral'),
+                      subtitle: const Text(
+                          'Top jogadores por seguidores na Skills Arena'),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: cs.onSurfaceVariant),
+                      onTap: () => AppNavigator.pushWithNavBar(
+                          context, const GlobalRankingScreen()),
+                    ),
+                    Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: cs.outlineVariant),
+                    ListTile(
+                      leading: Icon(Icons.shield_rounded, color: cs.primary),
+                      title: Row(
+                        children: [
+                          const Text('Times'),
+                          const SizedBox(width: 6),
+                          Icon(Icons.workspace_premium_rounded,
+                              size: 14, color: Colors.amber.shade700),
+                        ],
+                      ),
+                      subtitle: const Text(
+                          'Crie um time, desafie outros e marque jogos'),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: cs.onSurfaceVariant),
+                      onTap: () => AppNavigator.pushWithNavBar(
+                          context, const TeamsHubScreen()),
                     ),
                     Divider(
                         height: 1,

@@ -93,3 +93,7 @@ final mapRadiusProvider = StateProvider<double>((ref) => 5.0);
 /// mostra tudo na região visível (otimizado pelo debounce). Útil quando
 /// o usuário não encontra muita coisa no raio padrão.
 final globalSearchProvider = StateProvider<bool>((ref) => false);
+
+/// Mostra somente quadras com selo de verificada. Útil pra quem quer
+/// confiabilidade alta (locais conferidos pela equipe).
+final verifiedVenuesOnlyProvider = StateProvider<bool>((ref) => false);

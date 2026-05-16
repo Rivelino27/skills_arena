@@ -355,6 +355,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final radius = ref.watch(mapRadiusProvider);
     final selectedSport = ref.watch(selectedSportFilterProvider);
     final globalSearch = ref.watch(globalSearchProvider);
+    final verifiedOnly = ref.watch(verifiedVenuesOnlyProvider);
     final cs = Theme.of(context).colorScheme;
 
     // When the user has panned the map, filter by visible bounds;
@@ -368,6 +369,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final filteredVenues = venues.where((v) {
       if (selectedSport != null && v.sport != selectedSport) return false;
+      if (verifiedOnly && !v.isVerified) return false;
       if (bounds != null && !globalSearch) {
         return bounds.contains(LatLng(v.lat, v.lng));
       }
@@ -517,7 +519,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             height: 44,
                             child: GestureDetector(
                               onTap: () => _showVenueSheet(context, v),
-                              child: _VenueMarker(sport: v.sport),
+                              child: _VenueMarker(
+                                sport: v.sport,
+                                isVerified: v.isVerified,
+                              ),
                             ),
                           ))
                       .toList(),
@@ -1260,11 +1265,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(v.name,
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(v.name,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                            fontWeight: FontWeight.bold)),
+                              ),
+                              if (v.isVerified) ...[
+                                const SizedBox(width: 6),
+                                const Icon(Icons.verified_rounded,
+                                    size: 18, color: Colors.blue),
+                              ],
+                            ],
+                          ),
                           Text(
-                            '${v.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}',
+                            '${v.sport}${dist != null ? ' • ${GeoUtils.formatDistance(dist)}' : ''}'
+                            '${v.isVerified ? ' • Verificada' : ''}',
                             style: theme.textTheme.bodySmall
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
@@ -1658,19 +1676,41 @@ class _GeoResult {
 
 class _VenueMarker extends StatelessWidget {
   final String sport;
-  const _VenueMarker({required this.sport});
+  final bool isVerified;
+  const _VenueMarker({required this.sport, this.isVerified = false});
 
   @override
   Widget build(BuildContext context) {
     final color = _sportColor(sport);
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-      ),
-      child: Icon(_sportIcon(sport), color: Colors.white, size: 20),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 4)
+            ],
+          ),
+          child: Icon(_sportIcon(sport), color: Colors.white, size: 20),
+        ),
+        if (isVerified)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.verified_rounded,
+                  color: Colors.blue, size: 14),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1862,6 +1902,16 @@ class _RadiusSheet extends ConsumerWidget {
             value: globalSearch,
             onChanged: (v) =>
                 ref.read(globalSearchProvider.notifier).state = v,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.verified_rounded, color: Colors.blue),
+            title: const Text('Somente quadras verificadas'),
+            subtitle: const Text(
+                'Mostra no mapa apenas locais conferidos pela equipe.'),
+            value: ref.watch(verifiedVenuesOnlyProvider),
+            onChanged: (v) =>
+                ref.read(verifiedVenuesOnlyProvider.notifier).state = v,
           ),
         ],
       ),

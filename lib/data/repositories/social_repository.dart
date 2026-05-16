@@ -243,4 +243,14 @@ class SocialRepository {
       .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(UserModel.fromFirestore).toList());
+
+  /// Top users ordered by followersCount desc. Used by the global
+  /// ranking screen. Requires a Firestore index on `followersCount`
+  /// (Firestore auto-creates the single-field index by default).
+  Stream<List<UserModel>> topUsersByFollowersStream({int limit = 100}) => _db
+      .collection('users')
+      .orderBy('followersCount', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(UserModel.fromFirestore).toList());
 }

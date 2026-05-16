@@ -12,6 +12,7 @@ import '../../providers/post_provider.dart';
 import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
 import 'create_post_screen.dart';
+import 'shorts_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -43,6 +44,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Skills Arena'),
+        actions: [
+          IconButton(
+            tooltip: 'Modo Shorts',
+            icon: const Icon(Icons.smart_display_rounded),
+            onPressed: () => AppNavigator.pushWithNavBar(
+                context, const ShortsScreen()),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabCtrl,
           tabs: const [
