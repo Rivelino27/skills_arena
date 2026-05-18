@@ -127,15 +127,15 @@ class _MainShellState extends ConsumerState<MainShell> {
               elevation: 0,
               surfaceTintColor: Colors.transparent,
               destinations: [
-                const NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: 'Home',
+                NavigationDestination(
+                  icon: const Icon(Icons.home_outlined),
+                  selectedIcon: const Icon(Icons.home_rounded),
+                  label: t.tabHome,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.explore_outlined),
-                  selectedIcon: Icon(Icons.explore_rounded),
-                  label: 'Explorar',
+                NavigationDestination(
+                  icon: const Icon(Icons.explore_outlined),
+                  selectedIcon: const Icon(Icons.explore_rounded),
+                  label: t.tabExplore,
                 ),
                 NavigationDestination(
                   icon: Badge(
@@ -148,12 +148,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                     label: Text('$unreadChats'),
                     child: const Icon(Icons.chat_bubble_rounded),
                   ),
-                  label: 'Chat',
+                  label: t.tabMessages,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.person_outline_rounded),
-                  selectedIcon: Icon(Icons.person_rounded),
-                  label: 'Perfil',
+                NavigationDestination(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  selectedIcon: const Icon(Icons.person_rounded),
+                  label: t.tabProfile,
                 ),
               ],
             ),
@@ -184,6 +184,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../providers/chat_provider.dart';
 import '../chat/chat_screen.dart';
 import '../explore/explore_screen.dart';
@@ -253,6 +254,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final unreadChats = ref.watch(unreadConversationsCountProvider);
+    final t = AppLocalizations.of(context);
 
     return PopScope(
       canPop: false,
@@ -295,15 +297,15 @@ class _MainShellState extends ConsumerState<MainShell> {
               elevation: 0,
               surfaceTintColor: Colors.transparent,
               destinations: [
-                const NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: 'Home',
+                NavigationDestination(
+                  icon: const Icon(Icons.home_outlined),
+                  selectedIcon: const Icon(Icons.home_rounded),
+                  label: t.tabHome,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.explore_outlined),
-                  selectedIcon: Icon(Icons.explore_rounded),
-                  label: 'Explorar',
+                NavigationDestination(
+                  icon: const Icon(Icons.explore_outlined),
+                  selectedIcon: const Icon(Icons.explore_rounded),
+                  label: t.tabExplore,
                 ),
                 NavigationDestination(
                   icon: Badge(
@@ -316,12 +318,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                     label: Text('$unreadChats'),
                     child: const Icon(Icons.chat_bubble_rounded),
                   ),
-                  label: 'Chat',
+                  label: t.tabMessages,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.person_outline_rounded),
-                  selectedIcon: Icon(Icons.person_rounded),
-                  label: 'Perfil',
+                NavigationDestination(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  selectedIcon: const Icon(Icons.person_rounded),
+                  label: t.tabProfile,
                 ),
               ],
             ),

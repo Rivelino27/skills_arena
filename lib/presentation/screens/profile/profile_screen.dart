@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
 import '../teams/teams_hub_screen.dart';
@@ -25,13 +26,14 @@ class ProfileScreen extends ConsumerWidget {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final t = AppLocalizations.of(context);
 
     final coins = userAsync.valueOrNull?.coins ?? 0;
     final showCoinsChip = userAsync.valueOrNull?.isPremium ?? false;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Perfil'),
+        title: Text(t.profileTitle),
         actions: [
           if (showCoinsChip)
             Padding(
@@ -188,7 +190,7 @@ class ProfileScreen extends ConsumerWidget {
               ],
               // ── Conta ───────────────────────────────────────────────────
               Text(
-                'CONTA',
+                t.profileAccountSection,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   letterSpacing: 1.2,
@@ -210,9 +212,8 @@ class ProfileScreen extends ConsumerWidget {
                         color: cs.outlineVariant),
                     ListTile(
                       leading: const Icon(Icons.leaderboard_rounded),
-                      title: const Text('Ranking geral'),
-                      subtitle: const Text(
-                          'Top jogadores por seguidores na Skills Arena'),
+                      title: Text(t.profileRanking),
+                      subtitle: Text(t.profileRankingSubtitle),
                       trailing: Icon(Icons.chevron_right_rounded,
                           color: cs.onSurfaceVariant),
                       onTap: () => AppNavigator.pushWithNavBar(
@@ -225,9 +226,8 @@ class ProfileScreen extends ConsumerWidget {
                         color: cs.outlineVariant),
                     ListTile(
                       leading: const Icon(Icons.language_rounded),
-                      title: const Text('Idioma'),
-                      subtitle: const Text(
-                          'Português, Inglês, Espanhol, Chinês, Francês'),
+                      title: Text(t.profileLanguage),
+                      subtitle: Text(t.profileLanguageSubtitle),
                       trailing: Icon(Icons.chevron_right_rounded,
                           color: cs.onSurfaceVariant),
                       onTap: () => AppNavigator.pushWithNavBar(
@@ -242,14 +242,13 @@ class ProfileScreen extends ConsumerWidget {
                       leading: Icon(Icons.shield_rounded, color: cs.primary),
                       title: Row(
                         children: [
-                          const Text('Times'),
+                          Text(t.profileTeams),
                           const SizedBox(width: 6),
                           Icon(Icons.workspace_premium_rounded,
                               size: 14, color: Colors.amber.shade700),
                         ],
                       ),
-                      subtitle: const Text(
-                          'Crie um time, desafie outros e marque jogos'),
+                      subtitle: Text(t.profileTeamsSubtitle),
                       trailing: Icon(Icons.chevron_right_rounded,
                           color: cs.onSurfaceVariant),
                       onTap: () => AppNavigator.pushWithNavBar(
@@ -262,10 +261,9 @@ class ProfileScreen extends ConsumerWidget {
                         color: cs.outlineVariant),
                     ListTile(
                       leading: const Icon(Icons.home_outlined),
-                      title: const Text('Meu endereço'),
+                      title: Text(t.profileMyAddress),
                       subtitle: Text(
-                        user?.address ??
-                            'Defina um endereço fixo para o mapa',
+                        user?.address ?? t.profileMyAddressSubtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -281,9 +279,8 @@ class ProfileScreen extends ConsumerWidget {
                         color: cs.outlineVariant),
                     SwitchListTile(
                       secondary: const Icon(Icons.manage_search_rounded),
-                      title: const Text('Buscável por e-mail'),
-                      subtitle: const Text(
-                          'Outros usuários podem te achar pelo e-mail'),
+                      title: Text(t.profileSearchableByEmail),
+                      subtitle: Text(t.profileSearchableByEmailSubtitle),
                       value: searchableByEmail,
                       onChanged: (v) => _toggleSearchableByEmail(
                           firebaseUser?.uid, v),
@@ -297,7 +294,7 @@ class ProfileScreen extends ConsumerWidget {
                       leading:
                           Icon(Icons.logout_rounded, color: cs.error),
                       title: Text(
-                        'Sair da conta',
+                        t.profileSignOut,
                         style: TextStyle(color: cs.error),
                       ),
                       onTap: () => _confirmSignOut(context, ref),
@@ -362,20 +359,21 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
+    final t = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sair da conta'),
-        content: const Text('Tem certeza que deseja sair?'),
+        title: Text(t.profileSignOut),
+        content: Text(t.profileSignOutConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(t.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(
-              'Sair',
+              t.profileSignOut,
               style: TextStyle(
                   color: Theme.of(context).colorScheme.error),
             ),

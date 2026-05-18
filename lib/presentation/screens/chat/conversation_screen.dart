@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/chat_model.dart';
 import '../../../data/repositories/chat_repository.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../providers/chat_provider.dart';
 import '../explore/map_screen.dart';
 import '../profile/user_profile_screen.dart';
@@ -141,6 +142,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     final name = widget.conv.otherName(widget.myUid);
     final photo = widget.conv.otherPhoto(widget.myUid);
     final cs = Theme.of(context).colorScheme;
+    final t = AppLocalizations.of(context);
     // Em chat 1-1, tocar no header abre o perfil do outro. Grupos
     // (chat de quadra/dia/slot) não têm um "outro user" único.
     final isOneToOne = !widget.conv.isGroup;
@@ -177,7 +179,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
                     Text(name, overflow: TextOverflow.ellipsis),
                     if (isOneToOne)
                       Text(
-                        'Toque para ver perfil',
+                        t.chatTapToViewProfile,
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurface.withValues(alpha: 0.65),
@@ -197,12 +199,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             child: msgsAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Erro: $e')),
+              error: (e, _) => Center(child: Text('${t.commonError}: $e')),
               data: (msgs) {
                 if (msgs.isEmpty) {
                   return Center(
                     child: Text(
-                      'Diga olá para $name! 👋',
+                      '${t.chatSayHi} $name 👋',
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
@@ -483,6 +485,7 @@ class _MessageInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final t = AppLocalizations.of(context);
     return SafeArea(
       child: Container(
         padding:
@@ -495,7 +498,7 @@ class _MessageInput extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: 'Compartilhar localização',
+              tooltip: t.chatShareLocation,
               onPressed: onShareLocation,
               icon: Icon(Icons.location_on_outlined, color: cs.primary),
             ),
@@ -506,7 +509,7 @@ class _MessageInput extends StatelessWidget {
                 onSubmitted: (_) => onSend(),
                 maxLines: null,
                 decoration: InputDecoration(
-                  hintText: 'Mensagem...',
+                  hintText: t.chatNewMessage,
                   filled: true,
                   fillColor: cs.surfaceContainerHighest,
                   contentPadding: const EdgeInsets.symmetric(
