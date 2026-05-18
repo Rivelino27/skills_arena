@@ -11,6 +11,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
 
   # Firebase
   firebase_core: ^2.27.0
@@ -49,6 +52,10 @@ dependencies:
   url_launcher: ^6.2.0
   share_plus: ^9.0.0
   flutter_launcher_icons: ^0.14.4
+
+  # Players in-app pra YouTube e TikTok (sem sair pra app externo)
+  youtube_player_flutter: ^9.0.3
+  webview_flutter: ^4.7.0
 
 
 dev_dependencies:

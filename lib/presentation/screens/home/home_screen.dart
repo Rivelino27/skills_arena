@@ -12,6 +12,7 @@ import '../../providers/post_provider.dart';
 import '../chat/conversation_screen.dart';
 import '../profile/user_profile_screen.dart';
 import 'create_post_screen.dart';
+import 'in_app_video_screen.dart';
 import 'shorts_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -391,7 +392,7 @@ class _PostContent extends StatelessWidget {
       case PostType.youtube:
         return _YouTubeCard(post: post);
       case PostType.tiktok:
-        return _TikTokCard(url: post.content);
+        return _TikTokCard(post: post);
       case PostType.link:
         return _LinkCard(url: post.content);
     }
@@ -408,7 +409,8 @@ class _YouTubeCard extends StatelessWidget {
     final thumbnail = post.youtubeThumbnailUrl;
 
     return InkWell(
-      onTap: () => _launch(post.content),
+      onTap: () => AppNavigator.pushWithNavBar(
+          context, InAppVideoScreen(post: post)),
       borderRadius: BorderRadius.circular(12),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -438,21 +440,17 @@ class _YouTubeCard extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _launch(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
 }
 
 class _TikTokCard extends StatelessWidget {
-  final String url;
-  const _TikTokCard({required this.url});
+  final PostModel post;
+  const _TikTokCard({required this.post});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _launch(url),
+      onTap: () => AppNavigator.pushWithNavBar(
+          context, InAppVideoScreen(post: post)),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         height: 160,
@@ -471,18 +469,13 @@ class _TikTokCard extends StatelessWidget {
             Positioned(
               top: 12,
               right: 12,
-              child: Icon(Icons.open_in_new_rounded,
+              child: Icon(Icons.play_circle_filled_rounded,
                   color: Colors.white.withValues(alpha: 0.7), size: 18),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _launch(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 

@@ -37,20 +37,40 @@ class ConversationScreen extends ConsumerStatefulWidget {
       _ConversationScreenState();
 }
 
-class _ConversationScreenState extends ConsumerState<ConversationScreen> {
+class _ConversationScreenState extends ConsumerState<ConversationScreen>
+    with WidgetsBindingObserver {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Read no primeiro frame. As emissões posteriores do stream também
+    // chamam markAsRead, então mensagens novas chegando durante a tela
+    // aberta também limpam o badge.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chatRepositoryProvider).markAsRead(widget.chatId);
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Quando o usuário volta do background COM a tela do chat aberta,
+    // refaz o markAsRead — caso uma mensagem tenha chegado enquanto o
+    // app estava minimizado.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(chatRepositoryProvider).markAsRead(widget.chatId);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Última passada antes de sair — se uma mensagem chegou nos
+    // últimos milissegundos antes do user fechar a tela, garante que
+    // o badge não fique preso.
+    ref.read(chatRepositoryProvider).markAsRead(widget.chatId);
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();

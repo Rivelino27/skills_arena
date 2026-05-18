@@ -1,0 +1,53 @@
+{
+  "@@locale": "pt",
+
+  "appTitle": "Skills Arena",
+  "tabHome": "Home",
+  "tabExplore": "Explorar",
+  "tabMessages": "Mensagens",
+  "tabProfile": "Perfil",
+
+  "loginTitle": "Entrar",
+  "loginEmail": "E-mail",
+  "loginPassword": "Senha",
+  "loginButton": "Entrar",
+  "loginCreateAccount": "Criar conta",
+  "loginWithGoogle": "Entrar com Google",
+  "loginForgotPassword": "Esqueceu a senha?",
+
+  "profileTitle": "Perfil",
+  "profileAccountSection": "CONTA",
+  "profileEmail": "E-mail",
+  "profileMyAddress": "Meu endereço",
+  "profileRanking": "Ranking geral",
+  "profileTeams": "Times",
+  "profileSignOut": "Sair da conta",
+  "profileLanguage": "Idioma",
+  "profileSearchableByEmail": "Buscável por e-mail",
+
+  "languageSystem": "Padrão do sistema",
+  "languagePortuguese": "Português",
+  "languageEnglish": "Inglês",
+  "languageSpanish": "Espanhol",
+  "languageChinese": "Chinês",
+  "languageFrench": "Francês",
+
+  "commonCancel": "Cancelar",
+  "commonSave": "Salvar",
+  "commonDelete": "Apagar",
+  "commonConfirm": "Confirmar",
+  "commonLoading": "Carregando…",
+  "commonError": "Erro",
+
+  "chatNewMessage": "Mensagem...",
+  "chatSend": "Enviar",
+  "chatShareLocation": "Compartilhar localização",
+  "chatTapToViewProfile": "Toque para ver perfil",
+
+  "mapSearchRadius": "Raio de busca",
+  "mapGlobalSearch": "Busca global",
+  "mapVerifiedOnly": "Somente quadras verificadas",
+  "mapMyLocation": "Minha localização",
+  "mapWantToPlay": "Quero jogar",
+  "mapAddVenue": "Adicionar quadra"
+}

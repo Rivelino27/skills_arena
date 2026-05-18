@@ -1,0 +1,53 @@
+{
+  "@@locale": "es",
+
+  "appTitle": "Skills Arena",
+  "tabHome": "Inicio",
+  "tabExplore": "Explorar",
+  "tabMessages": "Mensajes",
+  "tabProfile": "Perfil",
+
+  "loginTitle": "Iniciar sesión",
+  "loginEmail": "Correo electrónico",
+  "loginPassword": "Contraseña",
+  "loginButton": "Iniciar sesión",
+  "loginCreateAccount": "Crear cuenta",
+  "loginWithGoogle": "Entrar con Google",
+  "loginForgotPassword": "¿Olvidaste la contraseña?",
+
+  "profileTitle": "Perfil",
+  "profileAccountSection": "CUENTA",
+  "profileEmail": "Correo electrónico",
+  "profileMyAddress": "Mi dirección",
+  "profileRanking": "Ranking general",
+  "profileTeams": "Equipos",
+  "profileSignOut": "Cerrar sesión",
+  "profileLanguage": "Idioma",
+  "profileSearchableByEmail": "Buscable por correo",
+
+  "languageSystem": "Predeterminado del sistema",
+  "languagePortuguese": "Portugués",
+  "languageEnglish": "Inglés",
+  "languageSpanish": "Español",
+  "languageChinese": "Chino",
+  "languageFrench": "Francés",
+
+  "commonCancel": "Cancelar",
+  "commonSave": "Guardar",
+  "commonDelete": "Eliminar",
+  "commonConfirm": "Confirmar",
+  "commonLoading": "Cargando…",
+  "commonError": "Error",
+
+  "chatNewMessage": "Mensaje...",
+  "chatSend": "Enviar",
+  "chatShareLocation": "Compartir ubicación",
+  "chatTapToViewProfile": "Toca para ver perfil",
+
+  "mapSearchRadius": "Radio de búsqueda",
+  "mapGlobalSearch": "Búsqueda global",
+  "mapVerifiedOnly": "Solo canchas verificadas",
+  "mapMyLocation": "Mi ubicación",
+  "mapWantToPlay": "Quiero jugar",
+  "mapAddVenue": "Añadir cancha"
+}

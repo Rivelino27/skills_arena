@@ -12,6 +12,7 @@ import '../teams/teams_hub_screen.dart';
 import '../../widgets/fifa_card_widget.dart';
 import 'edit_address_screen.dart';
 import 'global_ranking_screen.dart';
+import 'language_picker_screen.dart';
 import 'nav_demo_screen.dart';
 import 'player_card_screen.dart';
 
@@ -216,6 +217,21 @@ class ProfileScreen extends ConsumerWidget {
                           color: cs.onSurfaceVariant),
                       onTap: () => AppNavigator.pushWithNavBar(
                           context, const GlobalRankingScreen()),
+                    ),
+                    Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: cs.outlineVariant),
+                    ListTile(
+                      leading: const Icon(Icons.language_rounded),
+                      title: const Text('Idioma'),
+                      subtitle: const Text(
+                          'Português, Inglês, Espanhol, Chinês, Francês'),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: cs.onSurfaceVariant),
+                      onTap: () => AppNavigator.pushWithNavBar(
+                          context, const LanguagePickerScreen()),
                     ),
                     Divider(
                         height: 1,

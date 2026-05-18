@@ -1,0 +1,53 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Skills Arena",
+  "tabHome": "Home",
+  "tabExplore": "Explore",
+  "tabMessages": "Messages",
+  "tabProfile": "Profile",
+
+  "loginTitle": "Sign in",
+  "loginEmail": "Email",
+  "loginPassword": "Password",
+  "loginButton": "Sign in",
+  "loginCreateAccount": "Create account",
+  "loginWithGoogle": "Sign in with Google",
+  "loginForgotPassword": "Forgot password?",
+
+  "profileTitle": "Profile",
+  "profileAccountSection": "ACCOUNT",
+  "profileEmail": "Email",
+  "profileMyAddress": "My address",
+  "profileRanking": "Global ranking",
+  "profileTeams": "Teams",
+  "profileSignOut": "Sign out",
+  "profileLanguage": "Language",
+  "profileSearchableByEmail": "Searchable by email",
+
+  "languageSystem": "System default",
+  "languagePortuguese": "Portuguese",
+  "languageEnglish": "English",
+  "languageSpanish": "Spanish",
+  "languageChinese": "Chinese",
+  "languageFrench": "French",
+
+  "commonCancel": "Cancel",
+  "commonSave": "Save",
+  "commonDelete": "Delete",
+  "commonConfirm": "Confirm",
+  "commonLoading": "Loading…",
+  "commonError": "Error",
+
+  "chatNewMessage": "Message...",
+  "chatSend": "Send",
+  "chatShareLocation": "Share location",
+  "chatTapToViewProfile": "Tap to view profile",
+
+  "mapSearchRadius": "Search radius",
+  "mapGlobalSearch": "Global search",
+  "mapVerifiedOnly": "Verified venues only",
+  "mapMyLocation": "My location",
+  "mapWantToPlay": "I want to play",
+  "mapAddVenue": "Add venue"
+}

@@ -283,11 +283,15 @@ class ChatRepository {
     final batch = _db.batch();
     final msgRef = _chats.doc(chatId).collection('messages').doc();
     batch.set(msgRef, msg.toMap());
+    // serverTimestamp() em lastMessageAt + lastReadAt: usar relógio do
+    // servidor evita que skew entre devices deixe o badge "preso" como
+    // unread quando lastMessageAt do remetente é maior que lastReadAt
+    // do destinatário.
     batch.update(_chats.doc(chatId), {
       'lastMessage': text.trim(),
-      'lastMessageAt': Timestamp.fromDate(now),
+      'lastMessageAt': FieldValue.serverTimestamp(),
       'lastSenderId': user.uid,
-      'lastReadAt.${user.uid}': Timestamp.fromDate(now),
+      'lastReadAt.${user.uid}': FieldValue.serverTimestamp(),
     });
     await batch.commit();
   }
@@ -315,9 +319,9 @@ class ChatRepository {
     batch.set(msgRef, msg.toMap());
     batch.update(_chats.doc(chatId), {
       'lastMessage': '📍 Localização',
-      'lastMessageAt': Timestamp.fromDate(now),
+      'lastMessageAt': FieldValue.serverTimestamp(),
       'lastSenderId': user.uid,
-      'lastReadAt.${user.uid}': Timestamp.fromDate(now),
+      'lastReadAt.${user.uid}': FieldValue.serverTimestamp(),
     });
     await batch.commit();
   }
@@ -366,11 +370,15 @@ class ChatRepository {
   }
 
   /// Marks the conversation as read for the current user (now).
+  /// Marks the conversation as read at the *server's* clock. Critical
+  /// to use serverTimestamp here — otherwise clock skew between the
+  /// sender's and receiver's devices can leave `lastMessageAt >
+  /// lastReadAt` even when the receiver IS currently reading.
   Future<void> markAsRead(String chatId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     await _chats.doc(chatId).update({
-      'lastReadAt.$uid': Timestamp.now(),
+      'lastReadAt.$uid': FieldValue.serverTimestamp(),
     });
   }
 

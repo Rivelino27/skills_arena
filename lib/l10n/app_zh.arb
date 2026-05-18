@@ -1,0 +1,53 @@
+{
+  "@@locale": "zh",
+
+  "appTitle": "Skills Arena",
+  "tabHome": "首页",
+  "tabExplore": "探索",
+  "tabMessages": "消息",
+  "tabProfile": "个人资料",
+
+  "loginTitle": "登录",
+  "loginEmail": "电子邮件",
+  "loginPassword": "密码",
+  "loginButton": "登录",
+  "loginCreateAccount": "创建账户",
+  "loginWithGoogle": "使用 Google 登录",
+  "loginForgotPassword": "忘记密码？",
+
+  "profileTitle": "个人资料",
+  "profileAccountSection": "账户",
+  "profileEmail": "电子邮件",
+  "profileMyAddress": "我的地址",
+  "profileRanking": "全球排行榜",
+  "profileTeams": "队伍",
+  "profileSignOut": "退出登录",
+  "profileLanguage": "语言",
+  "profileSearchableByEmail": "可通过电子邮件搜索",
+
+  "languageSystem": "系统默认",
+  "languagePortuguese": "葡萄牙语",
+  "languageEnglish": "英语",
+  "languageSpanish": "西班牙语",
+  "languageChinese": "中文",
+  "languageFrench": "法语",
+
+  "commonCancel": "取消",
+  "commonSave": "保存",
+  "commonDelete": "删除",
+  "commonConfirm": "确认",
+  "commonLoading": "加载中…",
+  "commonError": "错误",
+
+  "chatNewMessage": "消息...",
+  "chatSend": "发送",
+  "chatShareLocation": "分享位置",
+  "chatTapToViewProfile": "点击查看资料",
+
+  "mapSearchRadius": "搜索半径",
+  "mapGlobalSearch": "全球搜索",
+  "mapVerifiedOnly": "仅认证场地",
+  "mapMyLocation": "我的位置",
+  "mapWantToPlay": "我想打球",
+  "mapAddVenue": "添加场地"
+}

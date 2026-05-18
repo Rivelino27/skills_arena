@@ -1,11 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/navigation/app_navigator.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/repositories/post_repository.dart';
 import '../../providers/post_provider.dart';
+import 'in_app_video_screen.dart';
 
 /// TikTok-style vertical pager over posts that contain a video link
 /// (YouTube or TikTok). Other post types are filtered out for a more
@@ -77,11 +78,8 @@ class _ShortItem extends ConsumerWidget {
   final String myUid;
   const _ShortItem({required this.post, required this.myUid});
 
-  Future<void> _open() async {
-    final uri = Uri.tryParse(post.content);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  void _open(BuildContext context) {
+    AppNavigator.pushWithNavBar(context, InAppVideoScreen(post: post));
   }
 
   @override
@@ -91,7 +89,7 @@ class _ShortItem extends ConsumerWidget {
     final isYoutube = post.type == PostType.youtube;
 
     return GestureDetector(
-      onTap: _open,
+      onTap: () => _open(context),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -225,7 +223,7 @@ class _ShortItem extends ConsumerWidget {
                   icon: Icons.chat_bubble_outline_rounded,
                   label: '${post.commentsCount}',
                   color: Colors.white,
-                  onTap: _open,
+                  onTap: () => _open(context),
                 ),
                 const SizedBox(height: 14),
                 _ShortAction(
