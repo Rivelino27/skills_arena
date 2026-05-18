@@ -10,9 +10,13 @@ import '../../../data/models/user_model.dart';
 import '../../../data/repositories/chat_repository.dart';
 import '../../../data/repositories/social_repository.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/team_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/fifa_card_widget.dart';
+import '../../widgets/playstyle_vote_sheet.dart';
 import '../../widgets/user_badge.dart';
 import '../chat/conversation_screen.dart';
+import '../teams/team_detail_screen.dart';
 
 final _userByIdProvider = StreamProvider.family<UserModel?, String>((ref, uid) {
   return FirebaseFirestore.instance
@@ -238,6 +242,48 @@ class _ProfileBody extends ConsumerWidget {
                   ],
                 ),
               ),
+            if (user.isPremium) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: Consumer(
+                  builder: (_, ref, __) {
+                    final votes =
+                        ref.watch(playstyleVotesProvider(user.id));
+                    final active = votes.valueOrNull?.activeKeys;
+                    return FifaCardWidget(
+                      user: user,
+                      scale: 0.75,
+                      activePlaystyles: active,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (!isMe)
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16),
+                  child: OutlinedButton.icon(
+                    onPressed: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20)),
+                      ),
+                      builder: (_) => PlaystyleVoteSheet(
+                        targetUid: user.id,
+                        targetName: user.name ?? 'Jogador',
+                      ),
+                    ),
+                    icon: const Icon(Icons.how_to_vote_rounded),
+                    label:
+                        const Text('Votar nas playstyles deste jogador'),
+                  ),
+                ),
+              const SizedBox(height: 12),
+            ],
+            _UserInfoCard(user: user),
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -370,6 +416,156 @@ class _MiniPostTile extends StatelessWidget {
       case PostType.link:
         return Icon(Icons.link_rounded, color: cs.primary);
     }
+  }
+}
+
+/// Resumo do usuário mostrado em todo perfil aberto pelo chat:
+/// e-mail, times que ele participa e posição no ranking geral
+/// (calculada a partir do `topUsersByFollowersProvider`).
+class _UserInfoCard extends ConsumerWidget {
+  final UserModel user;
+  const _UserInfoCard({required this.user});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final teamsAsync = ref.watch(userTeamsProvider(user.id));
+    final rankingAsync = ref.watch(topUsersByFollowersProvider);
+
+    // Posição no ranking (index + 1) ou null se não está nos top.
+    int? rankingPosition;
+    final ranking = rankingAsync.valueOrNull;
+    if (ranking != null) {
+      final i = ranking.indexWhere((u) => u.id == user.id);
+      if (i >= 0) rankingPosition = i + 1;
+    }
+
+    final showEmail = user.searchableByEmail && user.email.isNotEmpty;
+    final teams = teamsAsync.valueOrNull ?? const [];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showEmail) ...[
+                _InfoRow(
+                  icon: Icons.email_outlined,
+                  label: 'E-mail',
+                  value: user.email,
+                ),
+                const SizedBox(height: 6),
+              ],
+              _InfoRow(
+                icon: Icons.leaderboard_rounded,
+                label: 'Ranking geral',
+                value: rankingAsync.isLoading
+                    ? 'Carregando…'
+                    : rankingPosition != null
+                        ? '#$rankingPosition  ·  ${user.followersCount} seguidores'
+                        : 'Fora do top 100',
+              ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.shield_rounded,
+                      size: 16, color: cs.primary),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 84,
+                    child: Text('Times',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500)),
+                  ),
+                  Expanded(
+                    child: teamsAsync.when(
+                      loading: () => Text('Carregando…',
+                          style: TextStyle(
+                              fontSize: 13, color: cs.onSurfaceVariant)),
+                      error: (_, __) => Text('—',
+                          style: TextStyle(
+                              fontSize: 13, color: cs.onSurfaceVariant)),
+                      data: (_) => teams.isEmpty
+                          ? Text('Sem time',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: cs.onSurfaceVariant))
+                          : Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: teams
+                                  .map((t) => ActionChip(
+                                        avatar: const Icon(
+                                            Icons.shield_rounded,
+                                            size: 14),
+                                        label: Text(t.name,
+                                            style: const TextStyle(
+                                                fontSize: 12)),
+                                        visualDensity:
+                                            VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize
+                                                .shrinkWrap,
+                                        onPressed: () => AppNavigator
+                                            .pushWithNavBar(
+                                          context,
+                                          TeamDetailScreen(
+                                              teamId: t.id),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: cs.primary),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 84,
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w500)),
+        ),
+        Expanded(
+          child: Text(value,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13)),
+        ),
+      ],
+    );
   }
 }
 

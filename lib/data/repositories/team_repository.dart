@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors/app_failure.dart';
+import '../models/team_invite_model.dart';
 import '../models/team_match_model.dart';
 import '../models/team_model.dart';
 import '../models/user_model.dart';
@@ -22,6 +23,9 @@ class TeamRepository {
 
   CollectionReference<Map<String, dynamic>> get _matches =>
       _db.collection('team_matches');
+
+  CollectionReference<Map<String, dynamic>> get _invites =>
+      _db.collection('team_invites');
 
   // ─── Teams ────────────────────────────────────────────────────────────
 
@@ -261,6 +265,151 @@ class TeamRepository {
     } catch (e) {
       return const Left(
           ServerFailure(message: 'Erro ao atualizar desafio.'));
+    }
+  }
+
+  // ─── Invites (convites para entrar em time) ──────────────────────────
+
+  /// Convites recebidos pelo usuário logado, em ordem de chegada.
+  Stream<List<TeamInviteModel>> myInvitesStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value(const []);
+    return _invites
+        .where('inviteeUid', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((s) => s.docs.map(TeamInviteModel.fromFirestore).toList());
+  }
+
+  /// Convites pendentes que o usuário (capitão) enviou. Usado pra mostrar
+  /// "convite enviado" e permitir cancelar.
+  Stream<List<TeamInviteModel>> invitesSentStream(String teamId) {
+    return _invites
+        .where('teamId', isEqualTo: teamId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(TeamInviteModel.fromFirestore).toList());
+  }
+
+  /// Capitão envia convite. Rejeita se já houver um convite pendente pro
+  /// mesmo time/usuário (regras + check client-side).
+  Future<Either<AppFailure, Unit>> sendInvite({
+    required String teamId,
+    required UserModel invitee,
+  }) async {
+    try {
+      final me = FirebaseAuth.instance.currentUser;
+      if (me == null) {
+        return const Left(AuthFailure(message: 'Não autenticado.'));
+      }
+      final team = await getTeam(teamId);
+      if (team == null) {
+        return const Left(
+            ServerFailure(message: 'Time não encontrado.'));
+      }
+      if (!team.isCaptain(me.uid)) {
+        return const Left(AuthFailure(
+            message: 'Apenas o capitão pode convidar membros.'));
+      }
+      if (team.hasMember(invitee.id)) {
+        return const Left(
+            ServerFailure(message: 'Usuário já é membro.'));
+      }
+      // Deterministic ID: {teamId}_{inviteeUid}. Garante que a rule
+      // de `teams.update` consiga validar "existe convite pendente"
+      // com um exists(...) na mesma chave. Também impede duplicados.
+      final inviteId = '${teamId}_${invitee.id}';
+      final ref = _invites.doc(inviteId);
+      final existing = await ref.get();
+      if (existing.exists) {
+        return const Left(
+            ServerFailure(message: 'Já existe um convite para esse usuário.'));
+      }
+      final inv = TeamInviteModel(
+        id: ref.id,
+        teamId: team.id,
+        teamName: team.name,
+        captainId: me.uid,
+        captainName: team.captainName,
+        inviteeUid: invitee.id,
+        inviteeName: invitee.name ?? 'Jogador',
+        status: TeamInviteStatus.pending,
+        createdAt: DateTime.now(),
+      );
+      await ref.set(inv.toMap());
+      return const Right(unit);
+    } catch (e) {
+      return const Left(ServerFailure(message: 'Erro ao convidar.'));
+    }
+  }
+
+  /// O convidado aceita: marca invite como accepted E adiciona ele
+  /// ao time numa única transação para garantir consistência.
+  Future<Either<AppFailure, Unit>> acceptInvite(
+      TeamInviteModel invite) async {
+    try {
+      final me = FirebaseAuth.instance.currentUser;
+      if (me == null) {
+        return const Left(AuthFailure(message: 'Não autenticado.'));
+      }
+      if (me.uid != invite.inviteeUid) {
+        return const Left(
+            AuthFailure(message: 'Convite não é para você.'));
+      }
+      await _db.runTransaction((tx) async {
+        final teamRef = _teams.doc(invite.teamId);
+        final inviteRef = _invites.doc(invite.id);
+        final teamSnap = await tx.get(teamRef);
+        if (!teamSnap.exists) {
+          throw Exception('Time não encontrado.');
+        }
+        final team = TeamModel.fromFirestore(teamSnap);
+        if (team.hasMember(me.uid)) {
+          // já é membro — só marca o convite como aceito
+          tx.update(inviteRef,
+              {'status': TeamInviteStatus.accepted.storageKey});
+          return;
+        }
+        final newMember = TeamMember(
+          userId: me.uid,
+          userName: me.displayName ?? invite.inviteeName,
+          userPhotoUrl: me.photoURL,
+        );
+        final updated = [...team.members, newMember];
+        tx.update(teamRef, {
+          'members': updated.map((m) => m.toMap()).toList(),
+          'memberIds': FieldValue.arrayUnion([me.uid]),
+        });
+        tx.update(inviteRef,
+            {'status': TeamInviteStatus.accepted.storageKey});
+      });
+      return const Right(unit);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  /// O convidado recusa OU o capitão cancela. Como o doc usa ID
+  /// determinístico ({teamId}_{inviteeUid}), recusar deleta o doc —
+  /// assim o capitão pode mandar novo convite no futuro.
+  Future<Either<AppFailure, Unit>> respondInvite({
+    required String inviteId,
+    required TeamInviteStatus newStatus,
+  }) async {
+    try {
+      if (newStatus == TeamInviteStatus.declined ||
+          newStatus == TeamInviteStatus.cancelled) {
+        await _invites.doc(inviteId).delete();
+      } else {
+        await _invites.doc(inviteId).update({
+          'status': newStatus.storageKey,
+        });
+      }
+      return const Right(unit);
+    } catch (e) {
+      return const Left(
+          ServerFailure(message: 'Erro ao atualizar convite.'));
     }
   }
 }

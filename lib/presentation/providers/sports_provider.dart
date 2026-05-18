@@ -86,8 +86,8 @@ class SportFilterNotifier extends StateNotifier<String?> {
   }
 }
 
-/// Raio de busca em km (padrão 5 km).
-final mapRadiusProvider = StateProvider<double>((ref) => 5.0);
+/// Raio de busca em km (padrão 10 km).
+final mapRadiusProvider = StateProvider<double>((ref) => 10.0);
 
 /// Toggle de "busca global" no mapa — ignora o raio quando ativo e
 /// mostra tudo na região visível (otimizado pelo debounce). Útil quando

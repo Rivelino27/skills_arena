@@ -7,6 +7,7 @@ import '../../../data/models/chat_model.dart';
 import '../../../data/repositories/chat_repository.dart';
 import '../../providers/chat_provider.dart';
 import '../explore/map_screen.dart';
+import '../profile/user_profile_screen.dart';
 
 // ─── PADRÃO DE NAVEGAÇÃO ──────────────────────────────────────────────────────
 // Aberta via AppNavigator.pushWithNavBar() → bottom nav bar VISÍVEL.
@@ -120,27 +121,54 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final name = widget.conv.otherName(widget.myUid);
     final photo = widget.conv.otherPhoto(widget.myUid);
     final cs = Theme.of(context).colorScheme;
+    // Em chat 1-1, tocar no header abre o perfil do outro. Grupos
+    // (chat de quadra/dia/slot) não têm um "outro user" único.
+    final isOneToOne = !widget.conv.isGroup;
+    final otherUid = widget.conv.otherUid(widget.myUid);
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundImage:
-                  photo != null ? NetworkImage(photo) : null,
-              backgroundColor: cs.primaryContainer,
-              child: photo == null
-                  ? Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: TextStyle(
-                          color: cs.onPrimaryContainer, fontSize: 13),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(name, overflow: TextOverflow.ellipsis)),
-          ],
+        title: InkWell(
+          onTap: isOneToOne
+              ? () => AppNavigator.pushWithNavBar(
+                  context, UserProfileScreen(userId: otherUid))
+              : null,
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundImage:
+                    photo != null ? NetworkImage(photo) : null,
+                backgroundColor: cs.primaryContainer,
+                child: photo == null
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: TextStyle(
+                            color: cs.onPrimaryContainer, fontSize: 13),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(name, overflow: TextOverflow.ellipsis),
+                    if (isOneToOne)
+                      Text(
+                        'Toque para ver perfil',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurface.withValues(alpha: 0.65),
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       body: Column(

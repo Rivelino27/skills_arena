@@ -30,6 +30,6 @@ Deploy
 firebase deploy --only firestore:rules
 firebase deploy --only firestore:indexes
 ou junto:
-
+firebase deploy --only firestore:rules,firestore:indexes
 
 firebase deploy --only firestore

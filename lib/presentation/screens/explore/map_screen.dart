@@ -347,6 +347,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Mudar o raio (ou ligar/desligar global / verificadas) deve refrescar
+    // imediatamente — sem precisar do user arrastar o mapa. O hold-up era
+    // que `_regionBounds` ficava setado depois de um pan e dominava o
+    // filtro. Limpamos ele quando qualquer um desses três muda.
+    ref.listen<double>(mapRadiusProvider, (_, __) {
+      if (_regionBounds != null) setState(() => _regionBounds = null);
+    });
+    ref.listen<bool>(globalSearchProvider, (_, __) {
+      if (_regionBounds != null) setState(() => _regionBounds = null);
+    });
+    ref.listen<bool>(verifiedVenuesOnlyProvider, (_, __) {
+      if (_regionBounds != null) setState(() => _regionBounds = null);
+    });
+
     final venues = ref.watch(venuesStreamProvider).valueOrNull ?? [];
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
     final visibleUsers =

@@ -32,11 +32,17 @@ class PlayerCardScreen extends ConsumerWidget {
           if (!user.isPremium) {
             return _PaywallView(cs: cs);
           }
+          final votes = ref.watch(playstyleVotesProvider(user.id));
+          final active = votes.valueOrNull?.activeKeys;
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
               Center(
-                child: FifaCardWidget(user: user, scale: 1.1),
+                child: FifaCardWidget(
+                  user: user,
+                  scale: 1.1,
+                  activePlaystyles: active,
+                ),
               ),
               const SizedBox(height: 24),
               _CoinsSection(coins: user.coins),

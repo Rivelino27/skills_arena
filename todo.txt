@@ -1,12 +1,52 @@
 Falta arrumar / incluir:
 
+Notificações de mensasens sem o app precisar estar aberto, igual notificações do whatsapp.
+
+Videos do youtube e tiktok saem do app ao abrir eles, não devems air do app.
+
+Mudar o raio padrão de busca de alcance para 10 km, raio de busca de usuario deve poder buscar por user mesmo ele estando muito longe.
+
+no mapa, mesmo aumetnado o raio de busca não aparece outros users, só aparece quando eu navego até tal area ou diminuo o zoom, mudando o raio deve buscar novos usuarios 
+sem precisar de eu mexer no mapa.
+
+Na aba de mensagens ao abrir uma conversa deve serpossivel ver perfil do user que estou conversando, seu e-mail, time, posição no hanking também.
+
+Melhorar estilo das cartas, deixar mais bonita como um escudo, playstyles separados dos stats destacados cm efeito 3D e 
+sombra empilhados na vertical, cada carta deve ter um overall geral dos players tipo jogador inical 50 jogador muito vitorioso
+e bem avaliado por muitos 85 - 90 - até 99 e playstiles dourados, pessoas votam e tal jogador tem tal playstile ou não.
+
+Jogadores devem poder incluir outros users no seu time, fazendo o convite, cada quadra tem o time mais vitorioso como time rei dela.
+
+erro na aba mural da quadra / local:
+
+(ro: [cloud_flrestore/failed-preconditlon) The query requires an
+ndex. You Can create it heret https:N
+nsole.firebase corm'vl f
+Ires
+H MtYXJlbrr,EtY2JJNZEVZGFOYWJhC2VZLYhkZWZhdWXOKS9jb
+sZWNOawguR3JvdXBzL3Bvc3RzL21uZGV4ZXMvXxABCgsKB3
+Ibr,VISWQQAR0NcgljcmVhdGVkQXQQAh0McghfX25hbWVfxx
+
+erro na aba ranking da quadra / local:
+
+Erro: [Cloud_flrestore/failed-preconditlonl The query requires an
+index- You Can create It here https:./.'
+console.firebase.goc•gle.com/vl Ir,'project'skills-arena-c2c71 /
+HMtYXJlbrnEtYZJjNtEVZGFOYWJhC2VZLYhkZWZhd',vxOKS9jb2
+xsZWNOawguR3JvdXBzL3Swc3RzL21uZGV4ZXWXxABCgsKB3
+ZIbnVISWQQARoNcgljcmvhdGVkQXQQAhoM cghfX? 5hbwvfxx
+
+fazer app ser multi linguas, ingles, portugues, espanhol, chines, frances e o app detectar 
+o idioma do celular e definir a linguagem, mas a linguagem pode ser escolhida nas configuraçoes em perfil.
+
+<<<< fixed:
+
 falta coins para premium, card fifa de jogador premium, abilidades especiais de jogador, playstyles plus normal, bronze, 
 prata, dourado, 
 platina e diamante tipo foquete de velocidade, escudo de defesa, cartola e varinha magica de drible, bateria stamina, stats velocidade, drible, finalização, defesa, passe, bateria stamina, user premium ganha 
 5 coins ao iniciar e depois 2 coins por mes, protegida no banco de dados na nuvem para evitar hakcer alterar moedas e
  colocoar infinitas.
 
-<<<< fixed:
 arrume:
 em perfil, ao adicionar cep do endereço, aparece o endereço no form mas não da para selecionalo para salvar o endereço e influir numero da rua que aaprece no cép.
 

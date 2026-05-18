@@ -347,3 +347,89 @@ extension on Map<String, dynamic> {
     return fallback;
   }
 }
+
+/// Aggregated vote result. `counts[key]` = how many voters said the
+/// target has the playstyle `key`. `activeKeys` is the set that
+/// crossed the threshold to "officially" appear on the card.
+class PlaystyleVoteSummary {
+  final Map<String, int> counts;
+  final int totalVoters;
+  final bool didIVote;
+  final List<String> myVotes;
+  const PlaystyleVoteSummary({
+    required this.counts,
+    required this.totalVoters,
+    required this.didIVote,
+    required this.myVotes,
+  });
+
+  /// Active when at least 3 voters AND ≥ 30% of voters chose it.
+  Set<String> get activeKeys {
+    if (totalVoters < 3) return const {};
+    final out = <String>{};
+    counts.forEach((k, v) {
+      if (v >= 3 && v / totalVoters >= 0.3) out.add(k);
+    });
+    return out;
+  }
+}
+
+/// Repository extension for playstyle voting. Stored as a subcollection
+/// `users/{uid}/playstyle_votes/{voterUid}` where each doc is
+/// `{playstyles: [keys...]}`. Each voter has exactly one doc per target.
+extension PlaystyleVoting on SocialRepository {
+  CollectionReference<Map<String, dynamic>> _votesCol(String targetUid) =>
+      _db.collection('users').doc(targetUid).collection('playstyle_votes');
+
+  /// Live aggregation for a target user.
+  Stream<PlaystyleVoteSummary> playstyleVotesStream(String targetUid) {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    return _votesCol(targetUid).snapshots().map((s) {
+      final counts = <String, int>{};
+      List<String> myVotes = const [];
+      bool didIVote = false;
+      for (final doc in s.docs) {
+        final data = doc.data();
+        final votes = (data['playstyles'] as List? ?? const [])
+            .cast<String>()
+            .toList();
+        for (final k in votes) {
+          counts.update(k, (n) => n + 1, ifAbsent: () => 1);
+        }
+        if (doc.id == myUid) {
+          didIVote = true;
+          myVotes = votes;
+        }
+      }
+      return PlaystyleVoteSummary(
+        counts: counts,
+        totalVoters: s.docs.length,
+        didIVote: didIVote,
+        myVotes: myVotes,
+      );
+    });
+  }
+
+  /// Set my vote on `targetUid`. Pass an empty list to remove. Voting
+  /// for yourself is rejected (rules also enforce this).
+  Future<void> setPlaystyleVote({
+    required String targetUid,
+    required List<String> playstyles,
+  }) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+    if (me.uid == targetUid) {
+      throw Exception('Você não pode votar em si mesmo.');
+    }
+    final ref = _votesCol(targetUid).doc(me.uid);
+    if (playstyles.isEmpty) {
+      await ref.delete();
+    } else {
+      await ref.set({
+        'playstyles': playstyles,
+        'voterUid': me.uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+}

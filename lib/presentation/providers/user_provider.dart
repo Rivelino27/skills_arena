@@ -35,3 +35,10 @@ final visibleUsersStreamProvider = StreamProvider<List<UserModel>>((ref) {
 final topUsersByFollowersProvider = StreamProvider<List<UserModel>>((ref) {
   return ref.watch(socialRepositoryProvider).topUsersByFollowersStream();
 });
+
+/// Votos de playstyle agregados pra um usuário-alvo. Alimenta a coluna
+/// dourada de playstyles ao lado do card FIFA.
+final playstyleVotesProvider =
+    StreamProvider.family<PlaystyleVoteSummary, String>((ref, uid) {
+  return ref.watch(socialRepositoryProvider).playstyleVotesStream(uid);
+});

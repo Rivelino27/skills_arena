@@ -46,7 +46,6 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final radius = ref.watch(mapRadiusProvider);
     final usersAsync = ref.watch(usersStreamProvider);
     final players = ref.watch(availabilityStreamProvider).valueOrNull ?? [];
 
@@ -103,29 +102,22 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
               break;
           }
 
-          // Distance filter + sort
+          // Distance is ONLY used to sort (nearest first) — never filter.
+          // Busca de usuário deve achar qualquer pessoa, perto ou longe.
           final hasLoc =
               widget.userLat != null && widget.userLng != null;
           if (hasLoc) {
-            list = list.where((u) {
-              final lat = u.effectiveLat;
-              final lng = u.effectiveLng;
-              if (lat == null || lng == null) return true;
-              return GeoUtils.distanceKm(
-                      widget.userLat!, widget.userLng!, lat, lng) <=
-                  radius;
-            }).toList()
-              ..sort((a, b) {
-                final da = (a.effectiveLat == null || a.effectiveLng == null)
-                    ? double.infinity
-                    : GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
-                        a.effectiveLat!, a.effectiveLng!);
-                final db = (b.effectiveLat == null || b.effectiveLng == null)
-                    ? double.infinity
-                    : GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
-                        b.effectiveLat!, b.effectiveLng!);
-                return da.compareTo(db);
-              });
+            list.sort((a, b) {
+              final da = (a.effectiveLat == null || a.effectiveLng == null)
+                  ? double.infinity
+                  : GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
+                      a.effectiveLat!, a.effectiveLng!);
+              final db = (b.effectiveLat == null || b.effectiveLng == null)
+                  ? double.infinity
+                  : GeoUtils.distanceKm(widget.userLat!, widget.userLng!,
+                      b.effectiveLat!, b.effectiveLng!);
+              return da.compareTo(db);
+            });
           }
 
           final total = list.length;
@@ -248,8 +240,8 @@ class _FindUsersScreenState extends ConsumerState<FindUsersScreen> {
                     Expanded(
                       child: Text(
                         hasLoc
-                            ? 'Raio: ${radius.toStringAsFixed(0)} km • $total usuário(s)'
-                            : '$total usuário(s) • sem GPS para ordenar por distância',
+                            ? '$total usuário(s) • ordenado por distância'
+                            : '$total usuário(s)',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.onSurfaceVariant),
                       ),

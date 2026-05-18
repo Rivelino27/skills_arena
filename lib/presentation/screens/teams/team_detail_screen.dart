@@ -7,6 +7,7 @@ import '../../../data/models/team_model.dart';
 import '../../../data/repositories/team_repository.dart';
 import '../../providers/team_provider.dart';
 import '../profile/user_profile_screen.dart';
+import 'invite_member_sheet.dart';
 import 'propose_match_sheet.dart';
 
 /// Detail view of a single team. Shows captain + members and exposes:
@@ -144,12 +145,28 @@ class TeamDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (iAmIn)
+          if (iAmIn) ...[
             FilledButton.tonalIcon(
               onPressed: () => _openProposeMatch(context, team),
               icon: const Icon(Icons.sports_kabaddi_rounded),
               label: const Text('Desafiar outro time'),
-            )
+            ),
+            if (isCaptain) ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => InviteMemberSheet(team: team),
+                ),
+                icon: const Icon(Icons.person_add_alt_rounded),
+                label: const Text('Convidar membro'),
+              ),
+            ],
+          ]
           else
             Container(
               padding: const EdgeInsets.symmetric(

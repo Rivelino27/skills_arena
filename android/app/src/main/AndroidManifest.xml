@@ -58,6 +58,19 @@
             android:name="flutterEmbedding"
             android:value="2"/>
 
+        <!--
+          FCM: canal default usado quando o app está morto e o Android
+          monta a notificação direto a partir do payload (sem isolate
+          Flutter rodando). O ID precisa bater com o canal criado no
+          NotificationService (`'messages'`).
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/launcher_icon" />
+
     </application>
 
     <queries>

@@ -131,6 +131,19 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+
+      // ── Playstyle votes (subcoleção do user-alvo) ────────────────────
+      // `users/{targetUid}/playstyle_votes/{voterUid}` — cada voter tem
+      // 1 doc; o ID é sempre o UID do voter, o que impossibilita votar
+      // em nome de outra pessoa. Não pode votar em si mesmo.
+      match /playstyle_votes/{voterUid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+          && request.auth.uid == voterUid
+          && voterUid != uid
+          && request.resource.data.voterUid == voterUid;
+        allow delete: if isSignedIn() && request.auth.uid == voterUid;
+      }
     }
 
     // ── Sports venues (quadras) ───────────────────────────────────────────
@@ -279,8 +292,10 @@ service cloud.firestore {
         && request.resource.data.memberIds.hasAll([request.auth.uid])
         && isPremium();
 
-      // Capitão pode tudo. Não-capitão só pode se auto-remover:
-      // memberIds[i] saiu, member objects shrink, e nenhum outro campo muda.
+      // Capitão pode tudo. Não-capitão tem dois fluxos limitados:
+      //   (a) auto-remover: memberIds encolhe removendo o próprio UID.
+      //   (b) auto-add via convite: precisa existir doc em
+      //       team_invites/{teamId}_{uid} (deterministic ID).
       allow update: if isSignedIn() && (
         resource.data.captainId == request.auth.uid
         || (
@@ -289,10 +304,63 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['members', 'memberIds'])
         )
+        || (
+          // Aceitar convite: invitee adiciona a si mesmo. Validado pela
+          // existência do doc de convite com a chave determinística.
+          !(request.auth.uid in resource.data.memberIds)
+          && request.auth.uid in request.resource.data.memberIds
+          && exists(/databases/$(database)/documents/team_invites/$(teamId + '_' + request.auth.uid))
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['members', 'memberIds'])
+        )
       );
 
       allow delete: if isSignedIn()
         && resource.data.captainId == request.auth.uid;
+    }
+
+    // ── Convites para entrar em time ──────────────────────────────────────
+    // Capitão envia (status=pending). Convidado aceita/recusa. Capitão
+    // pode cancelar. Quem aceita também precisa permissão na rule de
+    // `teams.update` para se adicionar — a flow está em runTransaction.
+    match /team_invites/{inviteId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.captainId
+        || request.auth.uid == resource.data.inviteeUid
+      );
+      // Listar: rule de get/list aceita qualquer signed-in porque a query
+      // já filtra por inviteeUid OU teamId. Pra restringir mais use o
+      // `list` separado com check em request.auth.uid.
+      allow list: if isSignedIn();
+
+      // Criar: só o capitão do time pode, status precisa começar
+      // como `pending`. Doc ID precisa ser `{teamId}_{inviteeUid}` —
+      // isso garante unicidade do convite e permite o rule de teams
+      // checar com exists() na chave determinística.
+      allow create: if isSignedIn()
+        && request.resource.data.captainId == request.auth.uid
+        && request.auth.uid == teamDoc(request.resource.data.teamId).captainId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.inviteeUid != request.auth.uid
+        && inviteId == request.resource.data.teamId
+            + '_'
+            + request.resource.data.inviteeUid;
+
+      // Update: convidado aceita, OU capitão cancela. Só o campo
+      // `status` pode mudar. Recusar/cancelar usam delete (abaixo).
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status'])
+        && (
+          request.auth.uid == resource.data.inviteeUid
+          || request.auth.uid == resource.data.captainId
+        );
+
+      // Convidado pode declinar (deleta), capitão pode cancelar (deleta).
+      allow delete: if isSignedIn() && (
+        request.auth.uid == resource.data.inviteeUid
+        || request.auth.uid == resource.data.captainId
+      );
     }
 
     // ── Desafios entre times ──────────────────────────────────────────────

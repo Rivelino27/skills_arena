@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/app_navigator.dart';
+import '../../../data/models/team_invite_model.dart';
 import '../../../data/models/team_match_model.dart';
 import '../../../data/models/team_model.dart';
 import '../../../data/repositories/team_repository.dart';
@@ -107,13 +108,18 @@ class _MyTeamsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final myTeams = ref.watch(myTeamsProvider);
+    final invitesAsync = ref.watch(myTeamInvitesProvider);
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    final pendingInvites = (invitesAsync.valueOrNull ?? const [])
+        .where((i) => i.status == TeamInviteStatus.pending)
+        .toList();
 
     return myTeams.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Erro: $e')),
       data: (teams) {
-        if (teams.isEmpty) {
+        if (teams.isEmpty && pendingInvites.isEmpty) {
           return const _EmptyState(
             icon: Icons.shield_rounded,
             title: 'Você ainda não está em nenhum time',
@@ -121,13 +127,110 @@ class _MyTeamsTab extends ConsumerWidget {
                 'Crie um time como capitão ou peça pra alguém te adicionar.',
           );
         }
-        return ListView.separated(
+        return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: teams.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, i) => _TeamTile(team: teams[i], myUid: myUid),
+          children: [
+            if (pendingInvites.isNotEmpty) ...[
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.mark_email_unread_rounded,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Convites pendentes (${pendingInvites.length})',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium
+                          ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary,
+                              fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              for (final inv in pendingInvites) _InviteCard(invite: inv),
+              const Divider(height: 24),
+            ],
+            for (final t in teams)
+              _TeamTile(team: t, myUid: myUid),
+          ],
         );
       },
+    );
+  }
+}
+
+class _InviteCard extends ConsumerWidget {
+  final TeamInviteModel invite;
+  const _InviteCard({required this.invite});
+
+  Future<void> _accept(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final res =
+        await ref.read(teamRepositoryProvider).acceptInvite(invite);
+    res.fold(
+      (f) => messenger.showSnackBar(SnackBar(content: Text(f.message))),
+      (_) => messenger.showSnackBar(SnackBar(
+          content: Text('Você entrou no time ${invite.teamName}!'))),
+    );
+  }
+
+  Future<void> _decline(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await ref.read(teamRepositoryProvider).respondInvite(
+        inviteId: invite.id,
+        newStatus: TeamInviteStatus.declined);
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Convite recusado.')));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      color: cs.primaryContainer.withValues(alpha: 0.45),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(
+          children: [
+            Icon(Icons.shield_rounded, color: cs.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(invite.teamName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(
+                    'Convite de ${invite.captainName}',
+                    style:
+                        TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Aceitar',
+              icon: const Icon(Icons.check_circle_outline,
+                  color: Colors.green),
+              onPressed: () => _accept(context, ref),
+            ),
+            IconButton(
+              tooltip: 'Recusar',
+              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+              onPressed: () => _decline(context, ref),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

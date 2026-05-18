@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/app_navigator.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/user_provider.dart';
 import '../auth/login_screen.dart';
@@ -126,11 +127,19 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               if (isPremium && user != null) ...[
                 Center(
-                  child: FifaCardWidget(
-                    user: user,
-                    scale: 0.85,
-                    onTap: () => AppNavigator.pushWithNavBar(
-                        context, const PlayerCardScreen()),
+                  child: Consumer(
+                    builder: (_, ref, __) {
+                      final votes =
+                          ref.watch(playstyleVotesProvider(user.id));
+                      final active = votes.valueOrNull?.activeKeys;
+                      return FifaCardWidget(
+                        user: user,
+                        scale: 0.85,
+                        activePlaystyles: active,
+                        onTap: () => AppNavigator.pushWithNavBar(
+                            context, const PlayerCardScreen()),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -359,6 +368,9 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
+    // Remove FCM token deste device antes de deslogar — evita o
+    // próximo user receber push deste user no mesmo aparelho.
+    await NotificationService.instance.clearToken();
     await ref.read(authRepositoryProvider).signOut();
     if (!context.mounted) return;
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
